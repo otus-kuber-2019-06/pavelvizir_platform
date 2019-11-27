@@ -1,0 +1,200 @@
+# 1. install minikube
+# macos ##
+# check for requred features
+sysctl -a | grep -E --color 'machdep.cpu.features|VMX' 
+
+# NOT NEEDED due to hyperkit
+# # install virtualbox
+# brew cask install virtualbox
+# # or check for installed state
+# brew cask list -1 | grep -i virtualbox
+
+# install minikube finally
+brew install minikube
+# add completions to your .bash_profile
+~/.bash_profile:
+if [ -f "$(brew --prefix)/etc/bash_completion" ]; then
+    . "$(brew --prefix)/etc/bash_completion"
+fi
+
+source ~/.bash_profile
+
+# 2. create cluster
+# surprise - it uses hyperkit by default now instead of virtualbox
+# second surprise - it uses active kube-config
+# so create new kubeconfig for minikube
+~/.bash_profile:
+export K8M_KUBECONFIG=~/.kube/k8s-minikube-local.uu
+alias k8m="export KUBECONFIG=${K8M_KUBECONFIG}; kubectl get nodes
+
+source ~/.bash_profile
+k8m
+# now finally start minikube
+minikube start
+# Tip: Use 'minikube start -p <name>' to create a new cluster, or 'minikube delete' to delete this one.
+kubectl config view
+kubectl cluster-info
+
+# suggested 
+# dashboard
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.0-beta6/aio/deploy/recommended.yaml
+# create token for auth
+$ cat dashboard_serviceAccount.yml
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: admin-user
+  namespace: kubernetes-dashboard
+cat dashboard_clusterRoleBinding.yml
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: admin-user
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  - kind: ServiceAccount
+    name: admin-user
+    namespace: kubernetes-dashboard
+$ kubectl apply -f dashboard_serviceAccount.yml
+$ kubectl apply -f dashboard_clusterRoleBinding.yml
+$ kubectl -n kubernetes-dashboard describe secret $(kubectl -n kubernetes-dashboard get secret | grep admin-user | awk '{print $1}')
+...
+token:      eyJhbGciOiJSUzI1NiIsImtpZCI6IlBrOEMtNUFFVmNDd1h4OC1hVWNpN3VMMXFkQVoteVc4ZnhKT29nV0FKdzgifQ.eyJpc3MiOiJrdWJlcm5ldGVzL3NlcnZpY2VhY2NvdW50Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9uYW1lc3BhY2UiOiJrdWJlcm5ldGVzLWRhc2hib2FyZCIsImt1YmVybmV0ZXMuaW8vc2VydmljZWFjY291bnQvc2VjcmV0Lm5hbWUiOiJhZG1pbi11c2VyLXRva2VuLWsyNTdzIiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9zZXJ2aWNlLWFjY291bnQubmFtZSI6ImFkbWluLXVzZXIiLCJrdWJlcm5ldGVzLmlvL3NlcnZpY2VhY2NvdW50L3NlcnZpY2UtYWNjb3VudC51aWQiOiI3YmJjYjhhOS05NzExLTQ2YTItODA0Ny1hZTBlMjhmMzA3MDEiLCJzdWIiOiJzeXN0ZW06c2VydmljZWFjY291bnQ6a3ViZXJuZXRlcy1kYXNoYm9hcmQ6YWRtaW4tdXNlciJ9.csoDSUa6TP-7-mDcLdoEHNbKuYq9EgZNgG1PU4d3ecHqLNMdZ_vpTGRkdITUZjYIt46BmW9b2u-OwFoXZteRNGWvMwaZgdIv-EnW_p67FLGLnThK8XD365oimWwWe4Xxh_raMMSWRaMrDeHS6gWcZV4X3f_btQrBqCFokiVFACghyq5Gfd_6qrn7SSeGUX3aWEwOEhSGL5F2RXPcjKYcSqt9KRFNcFVZCLmCXPvlMycxgbkN0S4zz-YGKjTDbMdicw5yWZbhAQlJllDUIORSKHupM7Q_NhRFcKwHNPgu9U6zpE5nr92_G610Qg16X-tplxVPeEeseQ8kpI_XjQ4Ccw
+# copy this token to paste into dashboard field
+kubectl proxy
+http://localhost:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/#/overview?namespace=default
+
+# k9s
+brew install k9s 
+
+# training goes further
+minikube ssh
+$ docker ps
+# let's play
+$ docker rm -f $(docker ps -a -q)
+# in hosts's env
+kubectl get pods -n kube-system
+# play again
+kubectl delete pod --all -n kube-system
+# check cluster health
+kubectl get componentstatuses
+# or short 'cs'
+kubectl get cs
+# TODO: page 11 task - write down:
+# why pods keep returning back to life
+1. kube-apiserver = static pod, contolled by kubelet directly (/etc/kubernetes/manifests/kube-apiserver.yaml)
+2. core-dns = normal pod in deployment, deployment controller, replicas > 0
+
+# now create docker file for homework
+$ cat Dockerfile
+FROM python:3.8.0-alpine3.10
+
+RUN mkdir -p /app
+WORKDIR /app
+COPY app ./
+USER 1001:1001
+EXPOSE 8000
+ENTRYPOINT ["python3", "-m", "http.server"]
+
+$ cat app/homework.html
+<html><head><title>homework</title></head><body><h1>homework</h1></body></html>
+
+# test it
+docker build -t hw01 . && docker run -d --name hw01 -p 127.0.0.1:8000:8000/tcp hw01
+curl http://127.0.0.1:8000/homework.html
+docker rm -f hw01
+
+# continue homework
+$ mkdir -p kubernetes-intro/web
+$ cp Dockerfile kubernetes-intro/web/
+$ cp -r app kubernetes-intro/web/
+# now place image into public registry
+$ docker tag hw01 pavelvizir/hw01
+$ docker login -u pavelvizir
+$ docker push pavelvizir/hw01
+# now create pod manifest based on template given
+$ cat web-pod.yaml
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: web
+  labels:
+    key: web
+spec:
+  containers:
+    - name: web
+      image: pavelvizir/hw01
+
+$ kubectl apply -f web-pod.yaml
+$ kubectl get pods | grep -i web
+$ kubectl describe pods web
+$ kubectl get pods web -o yaml
+# now play with events on non-existant image
+sed 's/\(image: \).*/\1pavelvizir\/undefined/' web-pod.yaml | kubectl apply -f -
+kubectl describe pods web | sed -n '/^Events:/,//p'
+# return back to normal
+kubectl apply -f web-pod.yaml
+# now let's add init container
+cat web-pod.yaml:
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: web
+  labels:
+    key: web
+spec:
+  initContainers:
+    - name: init-web
+      image: busybox:1.31.1
+      command: ['sh', '-c', 'wget -O- https://raw.githubusercontent.com/express42/otus-platform-snippets/master/Module-02/Introduction-to-Kubernetes/wget.sh | sh']
+      volumeMounts:
+        - name: app
+          mountPath: /app
+  containers:
+    - name: web
+      image: pavelvizir/hw01
+      volumeMounts:
+        - name: app
+          mountPath: /app
+  volumes:
+    - name: app
+      emptyDir: {}
+
+# now recreate it
+kubectl delete pod web --force --grace-period=0; kubectl apply -f web-pod.yaml && kubectl get pods -w
+# now test it
+kubectl port-forward --address 0.0.0.0 pod/web 8000:8000
+# get index.html
+firefox http://localhost:8000/index.html
+# HINT: as an alternative use kube-forwarder
+#
+# Now prepare MR ...
+cd ../..
+git clone https://github.com/otus-kuber-2019-06/pavelvizir_platform.git
+git checkout -b kubernetes-intro
+# mv files from previously created repo
+# Make README somewhat readable
+# prepare ci/pr template
+curl -O https://raw.githubusercontent.com/express42/otus-platform-tests/2019-06/.travis.yml
+mkdir .github
+cd .github
+curl -O https://raw.githubusercontent.com/express42/otus-platform-tests/2019-06/.github/PULL_REQUEST_TEMPLATE.md
+cd ..
+# check repo structure
+# TODO:
+# create PR with description
+# add assegnee
+# merge afterwards i suppose
+git config --local user.name ""
+git config --local user.email ""
+git add .
+git commit -m "kubernetes-intro: Make homework-01"
+git push --set-upstream origin kubernetes-intro
+git push 
