@@ -7,6 +7,7 @@ pavelvizir Platform repository
 
 # Table of contents:  
 - [Homework-01 aka 'kubernetes-intro'](#homework-01-aka-kubernetes-intro)  
+- [Homework-02 aka 'kubernetes-security'](#homework-02-aka-kubernetes-security)  
 
 ## Homework-01 aka 'kubernetes-intro'  
 [.history-01](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-intro/.history-01)  
@@ -21,4 +22,11 @@ pavelvizir Platform repository
 ### Task \#2:  
 #### Make everything in homework
 
-[.history-01](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-intro/.history-01)
+[.history-01](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-intro/.history-01)  
+
+## Homework-02 aka 'kubernetes-security'  
+[.history-02](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-security/.history-02)  
+### Tasks \#01, \#02, \#03:  
+#### Play with service accounts, roles, (cluster)RoleBindings  
+
+[.history-02](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-security/.history-02)  

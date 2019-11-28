@@ -169,4 +169,28 @@ cd ..
 git add task03/ ../.history-02
 git commit -m "kubernetes-security: Complete task03"
 
+# now update README.md with this homework
+cd ..
+vim README.md
 
+# prepare pr
+# Выполнено ДЗ №2
+
+ - [*] Основное ДЗ
+
+## В процессе сделано:
+ - Практика с ServiceAccount, Role, RoleBinding
+
+## Как запустить проект:
+ - `for i in $(find kubernetes-security -name *.yaml | sort); do kubectl apply -f $i; done`
+
+## Как проверить работоспособность:
+ - `kubectl -n dev get rolebindings.rbac.authorization.k8s.io | grep 'jane\|ken' -q && echo OK! || echo FAIL!`
+
+## PR checklist:
+ - [*] Выставлен label с номером домашнего задания
+
+git add README.md .history-02
+git commit -m "kubernetes-security: Update README.md"
+git push
+# make PR, wait for tests to complete, close PR
