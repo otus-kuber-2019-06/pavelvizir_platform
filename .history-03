@@ -1,0 +1,83 @@
+git checkout -b kubernetes-networks
+# Plan:
+# test web-app
+#  pod healthchecks
+#  deployments
+#  clusterip
+#  ipvs
+# ingress access
+#  metallb l2
+#  loadbalancer
+#  ingress-controller
+#  ingress rules
+
+# add healthchecks
+vim kubernetes-intro/web-pod.yaml
+...
+readinessProbe:
+  httpGet:
+    path: /index.html
+    port: 80
+...
+
+kubectl delete pods web
+kubectl apply -f kubernetes-intro/web-pod.yaml
+kubectl get pods # make sure it's in Running state
+kubectl describe pod/web # look for conditions and events
+
+# add liveness probe despite wrong port
+vim kubernetes-intro/web-pod.yaml
+...
+livenessProbe:
+  tcpSocket:
+    port: 8000
+
+kubectl delete pods web --force --grace-period=0
+kubectl apply -f kubernetes-intro/web-pod.yaml
+
+# questions:
+1. what's wrong with the following?
+```sh
+livenessProbe:
+  exec:
+command:
+      - 'sh'
+      - '-c'
+      - 'ps aux | grep my_web_server_process'
+```
+ - checking for main process health is dumb. Make it exit in case of errors.
+2. when may you use that probe?
+ - when you've got multiple processes in pod i suppose
+
+# let's go further
+# deployment
+mkdir kubernetes-networks
+cd kubernetes-networks
+cp ../kubernetes-intro/web-pod.yaml web-deploy.yaml
+vim web-deploy.yaml
+... pod -> deploy, v1 -> apps/v1, spec shift with 2 positions
+
+kubectl apply -f web-deploy.yaml
+kubectl describe deployment.apps web
+
+# time to fix error in probe, increase replicas to 3
+kubectl apply -f web-deploy.yaml
+
+# next task
+# check conditions status equals true
+kubectl describe deploymenta.apps web
+# add strategy block
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 0
+    maxSurge: 100%
+
+# now play with values ot Surge and Unavailable
+# monitor process with kubectl get events --watch / kubespy trace deploy web
+# `brew install kubespy`
+# kubespy uses deprecated api :-(
+
+# intermediate commit
+
+# now to service creation
