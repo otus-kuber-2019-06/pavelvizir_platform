@@ -1,0 +1,196 @@
+# small disclaimer: all tasks should be in their own dir and all files numbered in order of execution
+
+git checkout -b kubernetes-security
+mkdir kubernetes-security
+cd kubernetes-security
+
+# task01
+#  create sa bob, give it cluster admin
+#  create sa dave w/o access to cluster
+mkdir task01
+cd task01
+vim 01_serviceAccount_bob.yaml
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+    name: bob
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: bob-cluster-admin
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: bob
+    namespace: default
+
+vim 02_serviceAccount_dave.yaml
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+    name: dave
+
+# now test it 
+kubectl apply -f 01_serviceAccount_bob.yaml
+kubectl apply -f 02_serviceAccount_dave.yaml
+# commit and next task
+cd ..
+git add task01 ../.history-02
+git commit -m "kubernetes-security: Complete task01"
+
+# task02
+#  create namespace prometheus
+#  create sa carol in this namespace
+#  give all sa in ns 'get, list, watch' to all pods in cluster
+mkdir task02
+cd task02
+
+cat 01_namespace_prometheus.yaml
+---
+kind: Namespace
+apiVersion: v1
+metadata:
+    name: prometheus
+
+cat 02_serviceAccount_carol.yaml
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: carol
+  namespace: prometheus
+
+cat 03_clusterRoleBinding_prometheus.yaml
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+roleRef:
+  kind: ClusterRole
+  name: prometheus
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: Group
+    name: system:serviceaccounts:prometheus
+    apiGroup: rbac.authorization.k8s.io
+
+# now test it
+for i in $(ls -1 *.yaml); do kubectl apply -f $i; done
+
+cd ..
+git add task02/ ../.history-02
+git commit -m "kubernetes-security: Complete task02"
+
+# now task 03
+#  create namespace dev
+#  create sa jane in dev
+#  give jane admin in dev
+#  create sa ken in dev
+#  give ken view in dev
+
+mkdir task03
+cd task03
+
+cat 01_namespace_dev.yaml
+---
+kind: Namespace
+apiVersion: v1
+metadata:
+  name: dev
+
+cat 02_serviceAccount_jane.yaml
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: jane
+  namespace: dev
+
+cat 03_roleBinding_jane.yaml
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: jane-admin
+  namespace: dev
+roleRef:
+  kind: ClusterRole
+  name: admin
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: jane
+    namespace: dev
+
+ cat 04_serviceAccount_ken.yaml
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ken
+  namespace: dev
+
+cat 05_roleBinding_ken.yaml
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ken-view
+  namespace: dev
+roleRef:
+  kind: ClusterRole
+  name: view
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: ken
+    namespace: dev
+
+# test it
+for i in $(ls -1 *.yaml); do kubectl apply -f $i; done
+
+cd ..
+git add task03/ ../.history-02
+git commit -m "kubernetes-security: Complete task03"
+
+# now update README.md with this homework
+cd ..
+vim README.md
+
+# prepare pr
+# Выполнено ДЗ №2
+
+ - [*] Основное ДЗ
+
+## В процессе сделано:
+ - Практика с ServiceAccount, Role, RoleBinding
+
+## Как запустить проект:
+ - `for i in $(find kubernetes-security -name *.yaml | sort); do kubectl apply -f $i; done`
+
+## Как проверить работоспособность:
+ - `kubectl -n dev get rolebindings.rbac.authorization.k8s.io | grep 'jane\|ken' -q && echo OK! || echo FAIL!`
+
+## PR checklist:
+ - [*] Выставлен label с номером домашнего задания
+
+git add README.md .history-02
+git commit -m "kubernetes-security: Update README.md"
+git push
+# make PR, wait for tests to complete, close PR
