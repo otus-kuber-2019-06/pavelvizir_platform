@@ -1,0 +1,45 @@
+# small disclaimer: all tasks should be in their own dir and all files numbered in order of execution
+
+git checkout -b kubernetes-security
+mkdir kubernetes-security
+cd kubernetes-security
+
+# task01
+#  create sa bob, give it cluster admin
+#  create sa dave w/o access to cluster
+mkdir task01
+cd task01
+vim 01_serviceAccount_bob.yaml
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+    name: bob
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: bob-cluster-admin
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: bob
+    namespace: default
+
+vim 02_serviceAccount_dave.yaml
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+    name: dave
+
+# now test it 
+kubectl apply -f 01_serviceAccount_bob.yaml
+kubectl apply -f 02_serviceAccount_dave.yaml
+# commit and next task
+cd ..
+git add task01 ../.history-02
+git commit -m "kubernetes-security: Complete task01"

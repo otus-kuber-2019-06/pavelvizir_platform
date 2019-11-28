@@ -198,3 +198,31 @@ git add .
 git commit -m "kubernetes-intro: Make homework-01"
 git push --set-upstream origin kubernetes-intro
 git push 
+
+### PR text
+# Выполнено ДЗ №1
+
+ - [*] Основное ДЗ
+
+## В процессе сделано:
+ - Практика в запуске minikube
+ - Практика написания pod manifest
+ - Почему поды в namespace kube-system восстанавливаются после удаления?
+   - kube-apiserver = static pod, contolled by kubelet directly (/etc/kubernetes/manifests/kube-apiserver.yaml)
+   - core-dns = normal pod in deployment, deployment controller, replicas > 0
+
+## Как запустить проект:
+```sh
+minikube start
+cd kubernetes-intro
+kubectl apply -f web-pod.yaml
+```
+
+## Как проверить работоспособность:
+```sh
+kubectl port-forward --address 0.0.0.0 pod/web 8000:8000
+curl http://localhost:8000/index.html
+```
+
+## PR checklist:
+ - [x] Выставлен label с номером домашнего задания
