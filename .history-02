@@ -97,3 +97,76 @@ cd ..
 git add task02/ ../.history-02
 git commit -m "kubernetes-security: Complete task02"
 
+# now task 03
+#  create namespace dev
+#  create sa jane in dev
+#  give jane admin in dev
+#  create sa ken in dev
+#  give ken view in dev
+
+mkdir task03
+cd task03
+
+cat 01_namespace_dev.yaml
+---
+kind: Namespace
+apiVersion: v1
+metadata:
+  name: dev
+
+cat 02_serviceAccount_jane.yaml
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: jane
+  namespace: dev
+
+cat 03_roleBinding_jane.yaml
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: jane-admin
+  namespace: dev
+roleRef:
+  kind: ClusterRole
+  name: admin
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: jane
+    namespace: dev
+
+ cat 04_serviceAccount_ken.yaml
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ken
+  namespace: dev
+
+cat 05_roleBinding_ken.yaml
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ken-view
+  namespace: dev
+roleRef:
+  kind: ClusterRole
+  name: view
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: ken
+    namespace: dev
+
+# test it
+for i in $(ls -1 *.yaml); do kubectl apply -f $i; done
+
+cd ..
+git add task03/ ../.history-02
+git commit -m "kubernetes-security: Complete task03"
+
+
