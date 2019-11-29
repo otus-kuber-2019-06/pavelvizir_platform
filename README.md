@@ -59,3 +59,24 @@ strategy:
 kubectl get events --watch 
 > brew install kubespy
 > Disappointment: kubespy uses deprecated API :-(
+
+### Task \#3:
+#### Play with services
+
+```yaml
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-svc-cip
+spec:
+  selector:
+    app: web
+  type: ClusterIP
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+```
+
+> Interesting dive into how it works and games with IPVS
