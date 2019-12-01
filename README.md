@@ -86,3 +86,7 @@ spec:
 
 [.history-03](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-networks/.history-03#L142-L185)  
 
+### Task \#5:
+#### Play with ingress
+
+[.history-03](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-networks/.history-03#L190-L247)  

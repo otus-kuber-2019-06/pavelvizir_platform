@@ -188,3 +188,84 @@ curl http://172.17.255.1/index.html | tail -3 | head -1 # multiple times to see 
 #
 
 # now to ingress
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/master/deploy/static/mandatory.yaml
+# usually we make nodeport service according to instructions
+# or easier: minkube addons enable ingress
+#
+# but we've got metallb, so
+cat nginx-lb.yaml
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: ingress-nginx
+  namespace: ingress-nginx
+  labels:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+spec:
+  externalTrafficPolicy: Local
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+  ports:
+    - {name: http, port: 80, targetPort: http}
+    - {name: https, port: 443, targetPort: https}
+
+kubectl apply -f nginx-lb.yaml
+minikube ssh
+curl http://172.17.255.2/index.html
+# openresty answers - that's nice
+cp web-svc-cip.yaml web-svc-headless.yaml
+# change name and clusterIP: None
+kubectl apply -f web-svc-headless.yaml
+kubectl get svc web-svc # cluster ip = None -> OK
+
+# now ingress rules
+cat web-ingress.yaml
+---
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  name: web
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /web
+            backend:
+              serviceName: web-svc
+              servicePort: 8000
+
+kubectl apply -f web-ingress.yaml
+kubectl describe ingress.extensions web # check for address and backend
+# let's test it
+minikube ssh
+curl http://172.17.255.2/web/index.html # OK
+
+# now commit's and PR
+#
+# PR text:
+# Выполнено ДЗ №3
+
+ - [*] Основное ДЗ
+
+## В процессе сделано:
+ - Практика работы с:
+   - Probes
+   - Strategy
+   - Services
+   - Metallb
+   - Ingress
+
+## Как запустить проект:
+ - `cd kubernetes-networks && kubectl apply -f . --recursive`
+
+## Как проверить работоспособность:
+ - `curl -I http://172.17.255.1/index.html`
+
+## PR checklist:
+ - [*] Выставлен label с номером домашнего задания
