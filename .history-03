@@ -138,3 +138,53 @@ ipvsadm --list -n
 # then exit toolbox and ping cluster ip 
 ip a kube-ipvs0 # there is real interface
 # ipset allows to see ipsets :-)
+
+# now next part - MetalLB
+# kubectl apply -f https://raw.githubusercontent.com/google/metallb/v0.8.0/manifests/metallb.yaml
+curl -O https://raw.githubusercontent.com/google/metallb/v0.8.0/manifests/metallb.yaml
+sed -i '' 's/extensions\(\/v1beta1\)/policy\1/' metallb.yaml
+kubectl apply -f metallb.yaml
+kubectl --namespace metallb-system get all
+
+# now let's prepare LB with cm
+cat metallb-config.yaml
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: metallb-system
+  name: config
+data:
+  config: |
+    address-pools:
+      - name: default
+        protocol: layer2
+        addresses:
+          - "172.17.255.1-172.17.255.255"
+
+kubectl apply -f metallb-config.yaml
+
+cp web-svc-cip.yaml web-svc-lb.yaml
+# change name and type to LoadBalancer
+kubectl apply -f web-svc-lb.yaml
+kubectl -n metallb-system logs controller-7845b997db-cnfwg | grep ipAllocated
+
+http://172.17.255.1/index.html
+# and nothing works because network is isolated
+# need to add static route
+minikube ssh
+ip a s eth0
+# now at host add route
+ip r a 172.17.255.0/24 via 192.168.64.3 # love iproute2 on mac :-)
+# and nothing works from host, no time to debug
+ip r d 172.17.255.0/24 via 192.168.64.3
+# just check it from inside the minikube
+minikube ssh
+curl http://172.17.255.1/index.html
+curl http://172.17.255.1/index.html | tail -3 | head -1 # multiple times to see different ips
+# that's round robin working
+
+# skipping 'star' task due to lack of time :-(
+#
+
+# now to ingress

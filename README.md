@@ -79,4 +79,10 @@ spec:
       targetPort: 8000
 ```
 
-> Interesting dive into how it works and games with IPVS
+> Interesting dive into how it works and games with IPVS  
+
+### Task \#4:
+#### Play with Metallb
+
+[.history-03](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-networks/.history-03#L142-L185)  
+
