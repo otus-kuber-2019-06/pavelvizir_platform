@@ -1,0 +1,54 @@
+# homework-05 aka kubernetes-storage
+git checkout -b kubernetes-storage
+# install CSI-driver and test snapshots
+mkdir kubernetes-storage
+cd kubernetes-storage
+# task is:
+#  cluster/cluster.yaml # cluster configuration with CSI snapshots
+#  hw/*.yaml: TODO
+
+mkdir cluster
+cd cluster
+vim cluster.yaml # enable feature gates (volumesnapshots = alpha)
+---
+apiVersion: kind.sigs.k8s.io/v1alpha3
+kind: Cluster
+kubeadmConfigPatches:
+  - |
+    apiVersion: kubeadm.k8s.io/v1beta2
+    kind: ClusterConfiguration
+    metadata:
+      name: config
+    apiServer:
+      extraArgs:
+        "feature-gates": "VolumeSnapshotDataSource=true"
+    scheduler:
+      extraArgs:
+        "feature-gates": "VolumeSnapshotDataSource=true"
+    controllerManager:
+      extraArgs:
+        "feature-gates": "VolumeSnapshotDataSource=true"
+  - |
+    apiVersion: kubeadm.k8s.io/v1beta2
+    kind: InitConfiguration
+    metadata:
+      name: config
+    nodeRegistration:
+      kubeletExtraArgs:
+        "feature-gates": "VolumeSnapshotDataSource=true"
+
+kind create cluster --config cluster.yaml
+
+# now check for api-versions
+kubectl api-resources| grep -i VolumeSnapshot # not yet 
+# install csi-driver-host-path
+cd ../../../
+git clone https://github.com/kubernetes-csi/csi-driver-host-path.git
+cd csi-driver-host-path/deploy/kubernetes-1.16/
+git checkout v1.2.0 # !!!!!!! took some time :-(
+./deploy-hostpath.sh
+
+# now check for api-versions
+kubectl api-resources| grep -i VolumeSnapshot # HOORAY!
+
+# finally create StorageClass
