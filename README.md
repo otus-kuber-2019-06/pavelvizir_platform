@@ -9,6 +9,7 @@ pavelvizir Platform repository
 - [Homework-01 aka 'kubernetes-intro'](#homework-01-aka-kubernetes-intro)  
 - [Homework-02 aka 'kubernetes-security'](#homework-02-aka-kubernetes-security)  
 - [Homework-03 aka 'kubernetes-networks'](#homework-03-aka-kubernetes-networks)  
+- [Homework-04 aka 'kubernetes-volumes'](#homework-04-aka-kubernetes-volumes)  
 
 ## Homework-01 aka 'kubernetes-intro'  
 [.history-01](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-intro/.history-01)  
@@ -90,3 +91,26 @@ spec:
 #### Play with ingress
 
 [.history-03](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-networks/.history-03#L190-L247)  
+
+## Homework-04 aka 'kubernetes-volumes'  
+[.history-04](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-volumes/.history-04)  
+### Task \#1:  
+#### Install kind and MinIO  
+
+```sh 
+brew install kind minio/stable/mc
+kind create cluster
+kubectl apply -f . --recursive
+```
+Test it:  
+```sh
+mc ls
+kubectl get statefulsets
+kubectl get pods
+kugectl get pvc
+kubectl get pv
+```
+Clean up:
+```sh
+kind delete cluster
+```
