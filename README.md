@@ -10,6 +10,7 @@ pavelvizir Platform repository
 - [Homework-02 aka 'kubernetes-security'](#homework-02-aka-kubernetes-security)  
 - [Homework-03 aka 'kubernetes-networks'](#homework-03-aka-kubernetes-networks)  
 - [Homework-04 aka 'kubernetes-volumes'](#homework-04-aka-kubernetes-volumes)  
+- [Homework-05 aka 'kubernetes-storage'](#homework-05-aka-kubernetes-storage)  
 
 ## Homework-01 aka 'kubernetes-intro'  
 [.history-01](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-intro/.history-01)  
@@ -113,4 +114,66 @@ kubectl get pv
 Clean up:
 ```sh
 kind delete cluster
+```
+
+## Homework-05 aka 'kubernetes-storage'  
+[.history-05](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-storage/.history-05)  
+### Task \#1:  
+#### Prepare cluster.yaml (feature gates to enable CSI snapshots)  
+
+```yaml
+---
+apiVersion: kind.sigs.k8s.io/v1alpha3
+kind: Cluster
+kubeadmConfigPatches:
+  - |
+    apiVersion: kubeadm.k8s.io/v1beta2
+    kind: ClusterConfiguration
+    metadata:
+      name: config
+    apiServer:
+      extraArgs:
+        "feature-gates": "VolumeSnapshotDataSource=true"
+    scheduler:
+      extraArgs:
+        "feature-gates": "VolumeSnapshotDataSource=true"
+    controllerManager:
+      extraArgs:
+        "feature-gates": "VolumeSnapshotDataSource=true"
+  - |
+    apiVersion: kubeadm.k8s.io/v1beta2
+    kind: InitConfiguration
+    metadata:
+      name: config
+    nodeRegistration:
+      kubeletExtraArgs:
+        "feature-gates": "VolumeSnapshotDataSource=true"
+```
+
+### Task \#2:  
+#### Create StorageClass for CSI Host Path Driver  
+
+```yaml
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: my-storageclass
+provisioner: hostpath.csi.k8s.io
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
+allowVolumeExpansion: true
+```
+
+### Task \#3:  
+#### Create PVC with name storage-pvc  
+
+```yaml
+```
+
+### Task \#4:  
+#### Create Pod with name storage-pod  
+> Mount storage into /data  
+
+```yaml
 ```

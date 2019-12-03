@@ -52,3 +52,22 @@ git checkout v1.2.0 # !!!!!!! took some time :-(
 kubectl api-resources| grep -i VolumeSnapshot # HOORAY!
 
 # finally create StorageClass
+cd ..
+mkdir hw
+cd hw
+cat 01_StorageClass.yaml
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: my-storageclass
+provisioner: hostpath.csi.k8s.io
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
+allowVolumeExpansion: true
+
+kubectl apply -f 01_StorageClass.yaml
+# check created storage class
+kubectl get storageclasses.storage.k8s.io my-storageclass
+
+# now create storage-pvc PVC
