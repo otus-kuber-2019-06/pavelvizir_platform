@@ -211,4 +211,59 @@ spec:
 
 ### Task \#5:  
 #### Test snapshots finally  
+> Snapshot and restore manifests further down, first goes shell test commands  
 
+```sh
+# write some data
+kubectl exec -it storage-pod -- /bin/sh
+ cat /dev/urandom | env LC_CTYPE=C tr -dc A-Za-z0-9 | head -c $(expr 79) | tee /data/storage-file
+ exit
+# create snapshot
+kubectl apply -f 04_Snapshot.yaml
+# delete data
+kubectl exec -it storage-pod -- /bin/sh -c 'rm -f /data/storage-file'
+kubectl apply -f 05_RestoreSnapshot.yaml
+# The PersistentVolumeClaim "storage-pvc" is invalid: spec: Forbidden: is immutable after creation except resources.requests for bound claims  
+# :-(
+# delete pvc
+kubectl delete pods storage-pod
+kubectl delete pvc storage-pvc
+# restore snapshot
+kubectl apply -f 05_RestoreSnapshot.yaml
+# recrete pod and read data
+kubectl exec -it storage-pod -- /bin/sh -c 'cat /data/storage-file'
+7cq6RytcqmsSEFYQHpKQ3V5Uemg8RQCTuBQ1XTlPBSu0Bv3rZfi1vVhjCOa0x30G7HKLr84arYgBPtz
+# HOORAY! OK
+```
+
+```yaml
+---
+apiVersion: snapshot.storage.k8s.io/v1alpha1
+kind: VolumeSnapshot
+metadata:
+  name: storage-snapshot
+spec:
+  snapshotClassName: csi-hostpath-snapclass
+  source:
+    name: storage-pvc
+    kind: PersistentVolumeClaim
+```
+
+```yaml
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: storage-pvc
+spec:
+  storageClassName: my-storageclass
+  dataSource:
+    name: storage-snapshot
+    kind: VolumeSnapshot
+    apiGroup: snapshot.storage.k8s.io
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+```
