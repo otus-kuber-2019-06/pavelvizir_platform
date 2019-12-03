@@ -169,6 +169,18 @@ allowVolumeExpansion: true
 #### Create PVC with name storage-pvc  
 
 ```yaml
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: storage-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: my-storageclass
 ```
 
 ### Task \#4:  
@@ -176,4 +188,27 @@ allowVolumeExpansion: true
 > Mount storage into /data  
 
 ```yaml
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: storage-pod
+spec:
+  restartPolicy: Always
+  containers:
+    - image: gcr.io/google_containers/busybox
+      command: ["/bin/sh", "-c"]
+      args: ["tail -f /dev/null"]
+      name: busybox
+      volumeMounts:
+        - name: storage-volume
+          mountPath: /data
+  volumes:
+    - name: storage-volume
+      persistentVolumeClaim:
+        claimName: storage-pvc
 ```
+
+### Task \#5:  
+#### Test snapshots finally  
+

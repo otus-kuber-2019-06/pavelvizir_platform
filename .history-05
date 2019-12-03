@@ -71,3 +71,47 @@ kubectl apply -f 01_StorageClass.yaml
 kubectl get storageclasses.storage.k8s.io my-storageclass
 
 # now create storage-pvc PVC
+cat 02_PVC.yaml
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: storage-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: my-storageclass
+
+kubectl apply -f 02_PVC.yaml
+# check creation
+kubectl get persistentvolumeclaims storage-pvc
+
+# now create storage-pod
+cat 03_Pod.yaml
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: storage-pod
+spec:
+  restartPolicy: Always
+  containers:
+    - image: gcr.io/google_containers/busybox
+      command: ["/bin/sh", "-c"]
+      args: ["tail -f /dev/null"]
+      name: busybox
+      volumeMounts:
+        - name: storage-volume
+          mountPath: /data
+  volumes:
+    - name: storage-volume
+      persistentVolumeClaim:
+        claimName: storage-pvc
+
+kubectl apply -f 03_Pod.yaml
+kubectl get pods storage-pod
+
+# now test snapshots
