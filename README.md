@@ -270,8 +270,10 @@ spec:
 
 ### Task \#X:  
 #### Overcoming tests  
-> Travis tests expect *bash* to be available,  
+> 1. Travis tests expect *bash* to be available,  
 > so had to change image and command  
+
+> 2. Travies tests expect storage class name = 'csi-hostpath-sc'
 
 From:  
 ```
@@ -285,3 +287,10 @@ To:
 ```
 Perform snapshots test again:  
 [Updated test run from .history-05](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-storage/.history-05#L212-L234)  
+
+Update (change storage class name):
+```sh
+sed -i '' 's/my-storageclass/csi-hostpath-sc/' $(rg storageclass . -l)       
+```
+Perform snapshots test again:  
+[Updated test run from .history-05](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-storage/.history-05#L241-L256)  

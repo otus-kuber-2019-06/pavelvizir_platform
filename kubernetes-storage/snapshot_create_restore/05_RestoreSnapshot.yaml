@@ -4,7 +4,7 @@ kind: PersistentVolumeClaim
 metadata:
   name: storage-pvc
 spec:
-  storageClassName: my-storageclass
+  storageClassName: csi-hostpath-sc
   dataSource:
     name: storage-snapshot
     kind: VolumeSnapshot
