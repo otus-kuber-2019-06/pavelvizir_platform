@@ -6,13 +6,14 @@ metadata:
 spec:
   restartPolicy: Always
   containers:
-    - image: gcr.io/google_containers/busybox
-      command: ["/bin/sh", "-c"]
+    - image: ubuntu:18.04
+      command: ["/bin/bash", "-ec"]
       args: ["tail -f /dev/null"]
       name: busybox
       volumeMounts:
         - name: storage-volume
           mountPath: /data
+  terminationGracePeriodSeconds: 0
   volumes:
     - name: storage-volume
       persistentVolumeClaim:

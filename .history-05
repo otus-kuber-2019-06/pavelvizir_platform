@@ -191,5 +191,49 @@ kubectl exec -it storage-pod -- /bin/sh -c 'cat /data/storage-file'
    - Например, после всех действий:
 `kubectl exec -it storage-pod -- /bin/sh -c 'cat /data/storage-file'`
 
+## Тесты предложение для улучшения
+ - Лучше в тестах использовать `sh` вместо ожидания наличия `bash`
+   [С чем столкнулся](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-storage/README.md#L271-L274)  
+
 ## PR checklist:
  - [*] Выставлен label с номером домашнего задания
+
+
+
+##### Tests failed due to 
+1. main reason - bash expected in container :-(
+2. doesn't fail, but looks dirty - "+kubectl apply -f kubernetes-storage/hw"
+### OVercoming tests...
+1. vim 03_Pod.yaml
+- image: gcr.io/google_containers/busybox
+  command: ["/bin/sh", "-c"] -> 
+
+  image: ubuntu:18.04
+  command: ["/bin/bash", "-ec"]
+2. mkdir ../snapshot_create_restore
+   mv 0{4,5}* ../snapshot_create_restore/
+
+# now retest just in case
+# write some data
+kubectl exec -it storage-pod -- /bin/bash
+ cat /dev/urandom | env LC_CTYPE=C tr -dc A-Za-z0-9 | head -c $(expr 79) | tee /data/storage-file
+ exit
+# create snapshot
+kubectl apply -f ../snapshot_create_restore/04_Snapshot.yaml
+# delete data
+kubectl exec -it storage-pod -- /bin/bash -c 'rm -f /data/storage-file'
+# kubectl apply -f ../snapshot_create_restore/05_RestoreSnapshot.yaml
+# The PersistentVolumeClaim "storage-pvc" is invalid: spec: Forbidden: is immutable after creation except resources.requests for bound claims  
+# :-(
+# delete pvc
+kubectl delete pods storage-pod
+kubectl delete pvc storage-pvc
+# restore snapshot
+kubectl apply -f ../snapshot_create_restore/05_RestoreSnapshot.yaml
+# recrete pod and read data
+kubectl apply -f 03_Pod.yaml
+kubectl exec -it storage-pod -- /bin/bash -c 'cat /data/storage-file'
+7cq6RytcqmsSEFYQHpKQ3V5Uemg8RQCTuBQ1XTlPBSu0Bv3rZfi1vVhjCOa0x30G7HKLr84arYgBPtz # HOORAY! OK
+# Works as good as before
+# Hope tests will pass ...
+# commit and push again

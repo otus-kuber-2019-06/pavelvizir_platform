@@ -267,3 +267,21 @@ spec:
     requests:
       storage: 1Gi
 ```
+
+### Task \#X:  
+#### Overcoming tests  
+> Travis tests expect *bash* to be available,  
+> so had to change image and command  
+
+From:  
+```
+- image: gcr.io/google_containers/busybox
+  command: ["/bin/sh", "-c"]
+```
+To:  
+```
+- image: ubuntu:18.04
+  command: ["/bin/bash", "-ec"]
+```
+Perform snapshots test again:  
+[Updated test run from .history-05](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-storage/.history-05#L212-L234)  
