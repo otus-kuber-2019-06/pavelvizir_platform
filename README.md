@@ -11,6 +11,7 @@ pavelvizir Platform repository
 - [Homework-03 aka 'kubernetes-networks'](#homework-03-aka-kubernetes-networks)  
 - [Homework-04 aka 'kubernetes-volumes'](#homework-04-aka-kubernetes-volumes)  
 - [Homework-05 aka 'kubernetes-storage'](#homework-05-aka-kubernetes-storage)  
+- [Homework-06 aka 'kubernetes-debug'](#homework-06-aka-kubernetes-debug)  
 
 ## Homework-01 aka 'kubernetes-intro'  
 [.history-01](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-intro/.history-01)  
@@ -294,3 +295,30 @@ sed -i '' 's/my-storageclass/csi-hostpath-sc/' $(rg storageclass . -l)
 ```
 Perform snapshots test again:  
 [Updated test run from .history-05](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-storage/.history-05#L241-L256)  
+
+## Homework-06 aka 'kubernetes-debug'  
+[.history-06](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-debug/.history-06)  
+### Task \#1:  
+#### Make strace work in kubectl debug  
+
+> It works now
+
+Because of:
+```
+docker inspect b9168fb3402f:
+...
+            "CapAdd": [
+                "SYS_PTRACE",
+                "SYS_ADMIN"
+            ],
+```
+ because of:
+[kubectl debug source code](https://github.com/aylei/kubectl-debug/blob/ca81bf784bc6570fb14b7c3ac4004d5b70853515/pkg/agent/runtime.go#L211)
+```
+CapAdd:      strslice.StrSlice([]string{"SYS_PTRACE", "SYS_ADMIN"}),
+```
+
+The easiest way to fail it is to empty CapAdd string and recompile
+
+### Task \#2:  
+#### Practice with iptables-tailer  

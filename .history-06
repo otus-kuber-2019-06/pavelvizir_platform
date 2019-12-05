@@ -1,0 +1,33 @@
+# kubernetes-debug
+git checkout -b kubernetes-debug
+mkdir kubernetes-debug
+cd kubernetes-debug
+
+# install kubectl debug
+brew install aylei/tap/kubectl-debug
+# check strace status in any pod
+kubectl debug web-5fdf67744d-98qdl
+# doesn't work, refer to documentation
+kubectl-debug --agentless --port-forward web-5fdf67744d-98qdl
+# appears it requires iptables, saw it in events
+# ok, one more try
+kubectl-debug --agentless --port-forward web-5fdf67744d-98qdl
+# finally works
+strace -c -p1
+# everything works 
+# let's check why
+# in another terminal connect to host with corresponding docker daemon
+docker inspect b9168fb3402f:
+            "CapAdd": [
+                "SYS_PTRACE",
+                "SYS_ADMIN"
+            ],
+# that's why it works 
+# because
+# https://github.com/aylei/kubectl-debug/blob/ca81bf784bc6570fb14b7c3ac4004d5b70853515/pkg/agent/runtime.go#L211
+CapAdd:      strslice.StrSlice([]string{"SYS_PTRACE", "SYS_ADMIN"}),
+# The easiest way to fail it is to empty string and recompile etc
+mkdir strace
+vim strace/README.md:
+
+# now to second task - iptables tailer
