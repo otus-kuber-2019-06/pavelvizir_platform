@@ -1,0 +1,271 @@
+git checkout -b kubernetes-networks
+# Plan:
+# test web-app
+#  pod healthchecks
+#  deployments
+#  clusterip
+#  ipvs
+# ingress access
+#  metallb l2
+#  loadbalancer
+#  ingress-controller
+#  ingress rules
+
+# add healthchecks
+vim kubernetes-intro/web-pod.yaml
+...
+readinessProbe:
+  httpGet:
+    path: /index.html
+    port: 80
+...
+
+kubectl delete pods web
+kubectl apply -f kubernetes-intro/web-pod.yaml
+kubectl get pods # make sure it's in Running state
+kubectl describe pod/web # look for conditions and events
+
+# add liveness probe despite wrong port
+vim kubernetes-intro/web-pod.yaml
+...
+livenessProbe:
+  tcpSocket:
+    port: 8000
+
+kubectl delete pods web --force --grace-period=0
+kubectl apply -f kubernetes-intro/web-pod.yaml
+
+# questions:
+1. what's wrong with the following?
+```sh
+livenessProbe:
+  exec:
+command:
+      - 'sh'
+      - '-c'
+      - 'ps aux | grep my_web_server_process'
+```
+ - checking for main process health is dumb. Make it exit in case of errors.
+2. when may you use that probe?
+ - when you've got multiple processes in pod i suppose
+
+# let's go further
+# deployment
+mkdir kubernetes-networks
+cd kubernetes-networks
+cp ../kubernetes-intro/web-pod.yaml web-deploy.yaml
+vim web-deploy.yaml
+... pod -> deploy, v1 -> apps/v1, spec shift with 2 positions
+
+kubectl apply -f web-deploy.yaml
+kubectl describe deployment.apps web
+
+# time to fix error in probe, increase replicas to 3
+kubectl apply -f web-deploy.yaml
+
+# next task
+# check conditions status equals true
+kubectl describe deploymenta.apps web
+# add strategy block
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 0
+    maxSurge: 100%
+
+# now play with values ot Surge and Unavailable
+# monitor process with kubectl get events --watch / kubespy trace deploy web
+# `brew install kubespy`
+# kubespy uses deprecated api :-(
+
+# intermediate commit
+
+# now to service creation
+cat web-svc-cip.yaml
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-svc-cip
+spec:
+  selector:
+    app: web
+  type: ClusterIP
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+
+kubectl apply -f web-svc-cip.yaml
+
+# let's test something
+minikube ssh
+sudo -i
+curl http://10.97.84.61/index.html # OK
+ping 10.97.84.61 # FAIL
+ip a | grep '10.97.84.61' # FAIL
+iptables -nv -t nat -L | grep -q '10.97.84.61' && echo OK
+
+# let's switch to IPVS
+
+kubectl --namespace kube-system edit configmaps kube-proxy
+mode: "" -> mode: "ipvs"
+# now delete pod to restart it with new settings
+kubectl --namespace kube-system delete pod --selector='k8s-app=kube-proxy'
+
+# recheck everything
+minikube ssh
+sudo -i 
+iptables -nv -t nat -L # old chains are here
+# kube-proxy --cleanup doesn't work
+# kubectl --namespace kube-system exec kube-proxy-<POD> kube-proxy --cleanup
+
+echo -e '*nat
+-A POSTROUTING -s 172.17.0.0/16 ! -o docker0 -j MASQUERADE
+COMMIT
+*filter
+COMMIT
+*mangle
+COMMIT
+' >> /tmp/iptables.cleanup
+iptables-restore < /tmp/iptables.cleanup
+# check again or wait and check again :-\
+iptables -nv -t nat -L
+# to have ipvsadm `toolbox` - to obtain fedore o.O
+toolbox
+dnf install -y ipvsadm && dnf clean all
+ipvsadm --list -n
+# then exit toolbox and ping cluster ip 
+ip a kube-ipvs0 # there is real interface
+# ipset allows to see ipsets :-)
+
+# now next part - MetalLB
+# kubectl apply -f https://raw.githubusercontent.com/google/metallb/v0.8.0/manifests/metallb.yaml
+curl -O https://raw.githubusercontent.com/google/metallb/v0.8.0/manifests/metallb.yaml
+sed -i '' 's/extensions\(\/v1beta1\)/policy\1/' metallb.yaml
+kubectl apply -f metallb.yaml
+kubectl --namespace metallb-system get all
+
+# now let's prepare LB with cm
+cat metallb-config.yaml
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: metallb-system
+  name: config
+data:
+  config: |
+    address-pools:
+      - name: default
+        protocol: layer2
+        addresses:
+          - "172.17.255.1-172.17.255.255"
+
+kubectl apply -f metallb-config.yaml
+
+cp web-svc-cip.yaml web-svc-lb.yaml
+# change name and type to LoadBalancer
+kubectl apply -f web-svc-lb.yaml
+kubectl -n metallb-system logs controller-7845b997db-cnfwg | grep ipAllocated
+
+http://172.17.255.1/index.html
+# and nothing works because network is isolated
+# need to add static route
+minikube ssh
+ip a s eth0
+# now at host add route
+ip r a 172.17.255.0/24 via 192.168.64.3 # love iproute2 on mac :-)
+# and nothing works from host, no time to debug
+ip r d 172.17.255.0/24 via 192.168.64.3
+# just check it from inside the minikube
+minikube ssh
+curl http://172.17.255.1/index.html
+curl http://172.17.255.1/index.html | tail -3 | head -1 # multiple times to see different ips
+# that's round robin working
+
+# skipping 'star' task due to lack of time :-(
+#
+
+# now to ingress
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/master/deploy/static/mandatory.yaml
+# usually we make nodeport service according to instructions
+# or easier: minkube addons enable ingress
+#
+# but we've got metallb, so
+cat nginx-lb.yaml
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: ingress-nginx
+  namespace: ingress-nginx
+  labels:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+spec:
+  externalTrafficPolicy: Local
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+  ports:
+    - {name: http, port: 80, targetPort: http}
+    - {name: https, port: 443, targetPort: https}
+
+kubectl apply -f nginx-lb.yaml
+minikube ssh
+curl http://172.17.255.2/index.html
+# openresty answers - that's nice
+cp web-svc-cip.yaml web-svc-headless.yaml
+# change name and clusterIP: None
+kubectl apply -f web-svc-headless.yaml
+kubectl get svc web-svc # cluster ip = None -> OK
+
+# now ingress rules
+cat web-ingress.yaml
+---
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  name: web
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /web
+            backend:
+              serviceName: web-svc
+              servicePort: 8000
+
+kubectl apply -f web-ingress.yaml
+kubectl describe ingress.extensions web # check for address and backend
+# let's test it
+minikube ssh
+curl http://172.17.255.2/web/index.html # OK
+
+# now commit's and PR
+#
+# PR text:
+# Выполнено ДЗ №3
+
+ - [*] Основное ДЗ
+
+## В процессе сделано:
+ - Практика работы с:
+   - Probes
+   - Strategy
+   - Services
+   - Metallb
+   - Ingress
+
+## Как запустить проект:
+ - `cd kubernetes-networks && kubectl apply -f . --recursive`
+
+## Как проверить работоспособность:
+ - `curl -I http://172.17.255.1/index.html`
+
+## PR checklist:
+ - [*] Выставлен label с номером домашнего задания

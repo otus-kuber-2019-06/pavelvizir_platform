@@ -8,6 +8,7 @@ pavelvizir Platform repository
 # Table of contents:  
 - [Homework-01 aka 'kubernetes-intro'](#homework-01-aka-kubernetes-intro)  
 - [Homework-02 aka 'kubernetes-security'](#homework-02-aka-kubernetes-security)  
+- [Homework-03 aka 'kubernetes-networks'](#homework-03-aka-kubernetes-networks)  
 
 ## Homework-01 aka 'kubernetes-intro'  
 [.history-01](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-intro/.history-01)  
@@ -30,3 +31,62 @@ pavelvizir Platform repository
 #### Play with service accounts, roles, (cluster)RoleBindings  
 
 [.history-02](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-security/.history-02)  
+
+## Homework-03 aka 'kubernetes-networks'  
+[.history-03](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-networks/.history-03)  
+### Task \#1:  
+#### What's wrong with the following probe? Any chance to use it with purpose?  
+```sh
+livenessProbe:
+  exec:
+    command:
+      - 'sh'
+      - '-c'
+      - 'ps aux | grep my_web_server_process'
+```
+> 1. Checking for main process is strange. You should aim to make it exit on errors.  
+> 2. Checking for secondary process i suppose.  
+
+### Task \#2:  
+#### Play with strategy  
+```yaml
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 0
+    maxSurge: 100%
+```
+kubectl get events --watch 
+> brew install kubespy
+> Disappointment: kubespy uses deprecated API :-(
+
+### Task \#3:
+#### Play with services
+
+```yaml
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-svc-cip
+spec:
+  selector:
+    app: web
+  type: ClusterIP
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+```
+
+> Interesting dive into how it works and games with IPVS  
+
+### Task \#4:
+#### Play with Metallb
+
+[.history-03](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-networks/.history-03#L142-L185)  
+
+### Task \#5:
+#### Play with ingress
+
+[.history-03](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-networks/.history-03#L190-L247)  
