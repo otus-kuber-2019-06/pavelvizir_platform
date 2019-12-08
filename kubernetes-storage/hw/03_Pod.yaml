@@ -1,0 +1,20 @@
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: storage-pod
+spec:
+  restartPolicy: Always
+  containers:
+    - image: ubuntu:18.04
+      command: ["/bin/bash", "-ec"]
+      args: ["tail -f /dev/null"]
+      name: busybox
+      volumeMounts:
+        - name: storage-volume
+          mountPath: /data
+  terminationGracePeriodSeconds: 0
+  volumes:
+    - name: storage-volume
+      persistentVolumeClaim:
+        claimName: storage-pvc

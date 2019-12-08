@@ -1,0 +1,261 @@
+# homework-05 aka kubernetes-storage
+git checkout -b kubernetes-storage
+# install CSI-driver and test snapshots
+mkdir kubernetes-storage
+cd kubernetes-storage
+# task is:
+#  cluster/cluster.yaml # cluster configuration with CSI snapshots
+#  hw/*.yaml: TODO
+
+mkdir cluster
+cd cluster
+vim cluster.yaml # enable feature gates (volumesnapshots = alpha)
+---
+apiVersion: kind.sigs.k8s.io/v1alpha3
+kind: Cluster
+kubeadmConfigPatches:
+  - |
+    apiVersion: kubeadm.k8s.io/v1beta2
+    kind: ClusterConfiguration
+    metadata:
+      name: config
+    apiServer:
+      extraArgs:
+        "feature-gates": "VolumeSnapshotDataSource=true"
+    scheduler:
+      extraArgs:
+        "feature-gates": "VolumeSnapshotDataSource=true"
+    controllerManager:
+      extraArgs:
+        "feature-gates": "VolumeSnapshotDataSource=true"
+  - |
+    apiVersion: kubeadm.k8s.io/v1beta2
+    kind: InitConfiguration
+    metadata:
+      name: config
+    nodeRegistration:
+      kubeletExtraArgs:
+        "feature-gates": "VolumeSnapshotDataSource=true"
+
+kind create cluster --config cluster.yaml
+
+# now check for api-versions
+kubectl api-resources| grep -i VolumeSnapshot # not yet 
+# install csi-driver-host-path
+cd ../../../
+git clone https://github.com/kubernetes-csi/csi-driver-host-path.git
+cd csi-driver-host-path/deploy/kubernetes-1.16/
+git checkout v1.2.0 # !!!!!!! took some time :-(
+./deploy-hostpath.sh
+
+# now check for api-versions
+kubectl api-resources| grep -i VolumeSnapshot # HOORAY!
+
+# finally create StorageClass
+cd ..
+mkdir hw
+cd hw
+cat 01_StorageClass.yaml
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: my-storageclass
+provisioner: hostpath.csi.k8s.io
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
+allowVolumeExpansion: true
+
+kubectl apply -f 01_StorageClass.yaml
+# check created storage class
+kubectl get storageclasses.storage.k8s.io my-storageclass
+
+# now create storage-pvc PVC
+cat 02_PVC.yaml
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: storage-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: my-storageclass
+
+kubectl apply -f 02_PVC.yaml
+# check creation
+kubectl get persistentvolumeclaims storage-pvc
+
+# now create storage-pod
+cat 03_Pod.yaml
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: storage-pod
+spec:
+  restartPolicy: Always
+  containers:
+    - image: gcr.io/google_containers/busybox
+      command: ["/bin/sh", "-c"]
+      args: ["tail -f /dev/null"]
+      name: busybox
+      volumeMounts:
+        - name: storage-volume
+          mountPath: /data
+  volumes:
+    - name: storage-volume
+      persistentVolumeClaim:
+        claimName: storage-pvc
+
+kubectl apply -f 03_Pod.yaml
+kubectl get pods storage-pod
+
+# now test snapshot
+# first prepare snapshot and restore manifests
+cat 04_Snapshot.yaml
+---
+apiVersion: snapshot.storage.k8s.io/v1alpha1
+kind: VolumeSnapshot
+metadata:
+  name: storage-snapshot
+spec:
+  snapshotClassName: csi-hostpath-snapclass
+  source:
+    name: storage-pvc
+    kind: PersistentVolumeClaim
+
+cat 05_RestoreSnapshot.yaml
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: storage-pvc
+spec:
+  storageClassName: my-storageclass
+  dataSource:
+    name: storage-snapshot
+    kind: VolumeSnapshot
+    apiGroup: snapshot.storage.k8s.io
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+
+# now finally test it
+# write some data
+kubectl exec -it storage-pod -- /bin/sh
+ cat /dev/urandom | env LC_CTYPE=C tr -dc A-Za-z0-9 | head -c $(expr 79) | tee /data/storage-file
+ exit
+# create snapshot
+kubectl apply -f 04_Snapshot.yaml
+# delete data
+kubectl exec -it storage-pod -- /bin/sh -c 'rm -f /data/storage-file'
+kubectl apply -f 05_RestoreSnapshot.yaml
+# The PersistentVolumeClaim "storage-pvc" is invalid: spec: Forbidden: is immutable after creation except resources.requests for bound claims  
+# :-(
+# delete pvc
+kubectl delete pods storage-pod
+kubectl delete pvc storage-pvc
+# restore snapshot
+kubectl apply -f 05_RestoreSnapshot.yaml
+# recrete pod and read data
+kubectl exec -it storage-pod -- /bin/sh -c 'cat /data/storage-file'
+7cq6RytcqmsSEFYQHpKQ3V5Uemg8RQCTuBQ1XTlPBSu0Bv3rZfi1vVhjCOa0x30G7HKLr84arYgBPtz # HOORAY! OK
+
+# now prepare PR
+# Выполнено ДЗ №5
+
+ - [*] Основное ДЗ
+
+## В процессе сделано:
+ - Подготовлен кластер с VolumeSnapshots
+   - Подготовлен cluster.yaml с VolumeSnpashots
+   - Создан StorageClass для CSI Host Path Driver
+   - Создан PVC storage-pvc
+   - Создан Pod storage-pod (/data)
+ - Протестированы VolumeSnapshots
+
+## Как запустить проект:
+ - В соответствии с [README.md](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-storage/README.md):
+   - Настроить CSI Host Path Driver
+   - Настроить кластер, под etc 
+   - Протестировать VolumeSnapshots
+
+## Как проверить работоспособность:
+ - В соответствии с [README.md](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-storage/README.md):
+   - Например, после всех действий:
+`kubectl exec -it storage-pod -- /bin/sh -c 'cat /data/storage-file'`
+
+## Тесты. Предложения для улучшения
+ - Лучше в тестах использовать `sh` вместо ожидания наличия `bash`
+   [С чем столкнулся](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-storage/README.md#L271-L274)  
+ - ИМО следует в задании объявить, что storageclass name должен быть `csi-hostpath-sc`
+   [С чем столкнулся](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-storage/README.md#L276)  
+
+## PR checklist:
+ - [*] Выставлен label с номером домашнего задания
+
+
+
+##### Tests failed due to 
+1. main reason - bash expected in container :-(
+2. doesn't fail, but looks dirty - "+kubectl apply -f kubernetes-storage/hw"
+### OVercoming tests...
+1. vim 03_Pod.yaml
+- image: gcr.io/google_containers/busybox
+  command: ["/bin/sh", "-c"] -> 
+
+  image: ubuntu:18.04
+  command: ["/bin/bash", "-ec"]
+2. mkdir ../snapshot_create_restore
+   git mv 0{4,5}* ../snapshot_create_restore/
+
+# now retest just in case
+# write some data
+kubectl exec -it storage-pod -- /bin/bash
+ cat /dev/urandom | env LC_CTYPE=C tr -dc A-Za-z0-9 | head -c $(expr 79) | tee /data/storage-file
+ exit
+# create snapshot
+kubectl apply -f ../snapshot_create_restore/04_Snapshot.yaml
+# delete data
+kubectl exec -it storage-pod -- /bin/bash -c 'rm -f /data/storage-file'
+# kubectl apply -f ../snapshot_create_restore/05_RestoreSnapshot.yaml
+# The PersistentVolumeClaim "storage-pvc" is invalid: spec: Forbidden: is immutable after creation except resources.requests for bound claims  
+# :-(
+# delete pvc
+kubectl delete pods storage-pod
+kubectl delete pvc storage-pvc
+# restore snapshot
+kubectl apply -f ../snapshot_create_restore/05_RestoreSnapshot.yaml
+# recrete pod and read data
+kubectl apply -f 03_Pod.yaml
+kubectl exec -it storage-pod -- /bin/bash -c 'cat /data/storage-file'
+7cq6RytcqmsSEFYQHpKQ3V5Uemg8RQCTuBQ1XTlPBSu0Bv3rZfi1vVhjCOa0x30G7HKLr84arYgBPtz # HOORAY! OK
+# Works as good as before
+# Hope tests will pass ...
+# commit and push again
+
+# ERROR again :-/
+# 
+# kubectl wait --for=condition=Ready pod storage-pod -n default --timeout=300s
+# error: timed out waiting for the condition on pods/storage-pod
+#
+# had to download tests to debug...
+#  curl -O https://raw.githubusercontent.com/express42/otus-platform-tests/2019-06/run.sh
+#  git clone https://github.com/express42/otus-platform-tests.git 
+# 
+# ERROR is because of:
+#   Warning  FailedMount  27s               kubelet, kind-control-plane  Unable to attach or mount volumes: unmounted volumes=[storage-volume], unattached volumes=[default-token-lrxgm storage-volume]: error processing PVC default/storage-pvc: PVC is not bound
+# because of:
+#   Warning  ProvisioningFailed  13s (x9 over 2m5s)  persistentvolume-controller  storageclass.storage.k8s.io "csi-hostpath-sc" not found
+
+# have to change "my-storageclass" to "csi-hostpath-sc"
+sed -i '' 's/my-storageclass/csi-hostpath-sc/' $(rg storageclass . -l)
+
+# test again with otus tests
+# commit, change PR etc and pray 
