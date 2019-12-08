@@ -1,0 +1,55 @@
+# kubernetes-volumes
+git checkout -b kubernetes-volumes
+mkdir kubernetes-volumes && cd kubernetes-volumes
+
+# install kind
+brew install kind
+# my specifics - make kind specific config and export it via variable
+# check that it uses your config
+kind get kubeconfig-path # deprecated
+kind create cluster
+
+# now let's install MinIO- local S3 storage
+curl -O https://raw.githubusercontent.com/express42/otus-platform-snippets/master/Module-02/Kuberenetes-volumes/minio-statefulset.yaml
+# edit it to stop yaml linter complaining :-(
+# change apiVersion to apps/v1 as well, 1.16 here
+kubectl apply -f minio-statefulset.yaml
+
+# now create headless service
+curl -O https://raw.githubusercontent.com/express42/otus-platform-snippets/master/Module-02/Kuberenetes-volumes/minio-headless-service.yaml
+kubectl apply -f minio-headless-service.yaml
+
+# now test it
+# install minio cli - mc
+brew install minio/stable/mc
+mc ls
+
+# test k8s resources as well
+kubectl get statefulsets
+kubectl get pods
+kubectl get pvc
+kubectl get pv
+
+# now delete it all
+kubectl delete cluster
+
+# now commit everything and prepare PR
+# Выполнено ДЗ №4
+
+ - [*] Основное ДЗ
+
+## В процессе сделано:
+ - Практика использования:
+   - volumes
+   - statefulset
+
+## Как запустить проект:
+```sh
+kind create cluster
+kubectl apply -f . --recursive
+```
+## Как проверить работоспособность:
+ - `mc ls`
+
+## PR checklist:
+ - [*] Выставлен label с номером домашнего задания
