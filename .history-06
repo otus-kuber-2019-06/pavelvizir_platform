@@ -31,3 +31,100 @@ mkdir strace
 vim strace/README.md:
 
 # now to second task - iptables tailer
+# install test app - netperf-operator
+for i in crd rbac operator
+do
+  curl -O https://raw.githubusercontent.com/piontec/netperf-operator/master/deploy/$i.yaml
+  kubectl apply -f $i.yaml
+done
+# now start test
+curl -O https://raw.githubusercontent.com/piontec/netperf-operator/master/deploy/cr.yaml
+kubectl apply -f cr.yaml
+# wait a bit
+kubectl describe netperfs.app.example.com example | grep Status:
+Status:
+  Status:              Done
+
+# now let's limit access
+vim netperf-calico-policy.yaml:
+---
+apiVersion: crd.projectcalico.org/v1
+kind: NetworkPolicy
+metadata:
+  name: netperf-calico-policy
+  labels:
+spec:
+  order: 10
+  selector: app == "netperf-operator"
+  ingress:
+    - action: Allow
+      source:
+        selector: netperf-role == "netperf-client"
+    - action: Log
+    - action: Deny
+  egress:
+    - action: Allow
+      destination:
+        selector: netperf-role == "netperf-client"
+    - action: Log
+    - action: Deny
+
+# apply it
+kubectl apply -f netperf-calico-policy.yaml
+# recreate test
+kubectl delete -f cr.yaml; kubectl apply -f cr.yaml
+# grep Status: again
+ssh node-01
+iptables -nv -L | grep DROP
+iptables -nv -L | grep LOG
+journalctl -k | grep calico
+# reading node kernel log is not a bright idea
+# time to introduce iptables-tailer
+curl -o iptables-tailer-daemonset.yaml https://raw.githubusercontent.com/box/kube-iptables-tailer/master/demo/daemonset.yaml
+# change apiVersion to 1.16, add selector
+kubectl apply -f iptables-tailer-daemonset.yaml
+# serviceAccount errors
+# github.com/box/kube-iptables-tailer/event/locator.go:101: Failed to list *v1.Pod: pods is forbidden: User "system:serviceaccount:kube-system:default" cannot list resource "pods" in API group "" at the cluster scope
+# create role, account, binding for this
+# as usual
+kubectl apply -f iptables-tailer-service-account.yaml
+kubectl apply -f iptables-tailer-role.yaml
+kubectl apply -f iptables-tailer-rolebinding.yaml
+vim iptables-tailer-daemonset.yaml:
+  serviceAccountName: iptables-tailer
+
+# HOORAY! no more previous errors with access
+
+# now let's fix logs prefix
+calico-drop -> calico-packet
+# switch to journald as well
+ -> JOURNAL_DIRECTORY, /var/log/journal
+# fail again, but now we got help after this torture
+curl -o iptables-tailer-daemonset-virtualshuric.yaml https://raw.githubusercontent.com/express42/otus-platform-snippets/master/Module-03/Debugging/iptables-tailer.yaml
+# fix apiVersion, matchLabels, service account as wel
+# delete old, create new daemonset
+# finally it works somehow
+kubectl get events -A 
+kubectl describe pods --selector=app=netperf-operator
+# skip starred tasks as usually
+# time to prepare for PR 
+mkdir kit
+mv *.* kit/
+# Update README.md
+# Prepare PR text
+# Выполнено ДЗ №6
+
+ - [*] Основное ДЗ
+
+## В процессе сделано:
+ - Практика дебага k8s на примере:
+   - kubectl-debug
+   - iptables-tailer
+
+## Как запустить и проверить проект:
+ - kubectl-debug --agentless --port-forward <pod_name>
+ - kubectl apply -f kit --recursive
+  - kubectl get events -A 
+
+## PR checklist:
+ - [*] Выставлен label с номером домашнего задания

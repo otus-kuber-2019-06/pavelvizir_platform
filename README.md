@@ -300,6 +300,7 @@ Perform snapshots test again:
 [.history-06](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-debug/.history-06)  
 ### Task \#1:  
 #### Make strace work in kubectl debug  
+[.history-06-kubectl-debug](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-debug/.history-06#L1-L31)  
 
 > It works now
 
@@ -322,3 +323,46 @@ The easiest way to fail it is to empty CapAdd string and recompile
 
 ### Task \#2:  
 #### Practice with iptables-tailer  
+[.history-06-iptables-tailer](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-debug/.history-06#L33-L108)  
+
+Install test app - netperf-operator:  
+```sh
+for i in crd rbac operator cr
+do
+  curl -O https://raw.githubusercontent.com/piontec/netperf-operator/master/deploy/$i.yaml
+  kubectl apply -f $i.yaml
+done        
+```
+
+Now create calico policy:
+```yaml
+---
+apiVersion: crd.projectcalico.org/v1
+kind: NetworkPolicy
+metadata:
+  name: netperf-calico-policy
+  labels:
+spec:
+  order: 10
+  selector: app == "netperf-operator"
+  ingress:
+    - action: Allow
+      source:
+        selector: netperf-role == "netperf-client"
+    - action: Log
+    - action: Deny
+  egress:
+    - action: Allow
+      destination:
+        selector: netperf-role == "netperf-client"
+    - action: Log
+    - action: Deny
+```
+
+Create service account, role, rolebinding for iptables-tailer.  
+
+Install iptables-tailer.  
+
+Fix all errors to finally get result with:  
+`kubectl get events -A`  
+
