@@ -11,6 +11,7 @@ pavelvizir Platform repository
 - [Homework-03 aka 'kubernetes-networks'](#homework-03-aka-kubernetes-networks)  
 - [Homework-04 aka 'kubernetes-volumes'](#homework-04-aka-kubernetes-volumes)  
 - [Homework-05 aka 'kubernetes-storage'](#homework-05-aka-kubernetes-storage)  
+- [Homework-06 aka 'kubernetes-debug'](#homework-06-aka-kubernetes-debug)  
 
 ## Homework-01 aka 'kubernetes-intro'  
 [.history-01](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-intro/.history-01)  
@@ -294,3 +295,74 @@ sed -i '' 's/my-storageclass/csi-hostpath-sc/' $(rg storageclass . -l)
 ```
 Perform snapshots test again:  
 [Updated test run from .history-05](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-storage/.history-05#L241-L256)  
+
+## Homework-06 aka 'kubernetes-debug'  
+[.history-06](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-debug/.history-06)  
+### Task \#1:  
+#### Make strace work in kubectl debug  
+[.history-06-kubectl-debug](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-debug/.history-06#L1-L31)  
+
+> It works now
+
+Because of:
+```
+docker inspect b9168fb3402f:
+...
+            "CapAdd": [
+                "SYS_PTRACE",
+                "SYS_ADMIN"
+            ],
+```
+ because of:
+[kubectl debug source code](https://github.com/aylei/kubectl-debug/blob/ca81bf784bc6570fb14b7c3ac4004d5b70853515/pkg/agent/runtime.go#L211)
+```
+CapAdd:      strslice.StrSlice([]string{"SYS_PTRACE", "SYS_ADMIN"}),
+```
+
+The easiest way to fail it is to empty CapAdd string and recompile
+
+### Task \#2:  
+#### Practice with iptables-tailer  
+[.history-06-iptables-tailer](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-debug/.history-06#L33-L108)  
+
+Install test app - netperf-operator:  
+```sh
+for i in crd rbac operator cr
+do
+  curl -O https://raw.githubusercontent.com/piontec/netperf-operator/master/deploy/$i.yaml
+  kubectl apply -f $i.yaml
+done        
+```
+
+Now create calico policy:
+```yaml
+---
+apiVersion: crd.projectcalico.org/v1
+kind: NetworkPolicy
+metadata:
+  name: netperf-calico-policy
+  labels:
+spec:
+  order: 10
+  selector: app == "netperf-operator"
+  ingress:
+    - action: Allow
+      source:
+        selector: netperf-role == "netperf-client"
+    - action: Log
+    - action: Deny
+  egress:
+    - action: Allow
+      destination:
+        selector: netperf-role == "netperf-client"
+    - action: Log
+    - action: Deny
+```
+
+Create service account, role, rolebinding for iptables-tailer.  
+
+Install iptables-tailer.  
+
+Fix all errors to finally get result with:  
+`kubectl get events -A`  
+
