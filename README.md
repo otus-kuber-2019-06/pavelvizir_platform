@@ -12,6 +12,7 @@ pavelvizir Platform repository
 - [Homework-04 aka 'kubernetes-volumes'](#homework-04-aka-kubernetes-volumes)  
 - [Homework-05 aka 'kubernetes-storage'](#homework-05-aka-kubernetes-storage)  
 - [Homework-06 aka 'kubernetes-debug'](#homework-06-aka-kubernetes-debug)  
+- [Homework-07 aka 'kubernetes-operators'](#homework-07-aka-kubernetes-operators)  
 
 ## Homework-01 aka 'kubernetes-intro'  
 [.history-01](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-intro/.history-01)  
@@ -365,4 +366,77 @@ Install iptables-tailer.
 
 Fix all errors to finally get result with:  
 `kubectl get events -A`  
+
+## Homework-07 aka 'kubernetes-operators'  
+[.history-07](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-operators/.history-07)  
+### Task \#1:  
+#### Create CR and CRD, make validations, adopt to 1.16
+
+deploy/cr.yaml:
+```yaml
+---
+apiVersion: otus.homework/v1
+kind: MySQL
+metadata:
+  name: mysql-instance
+spec:
+  image: mysql:5.7
+  database: otus-database
+  password: otuspassword
+  storage_size: 1Gi
+# useless_data: "useless info
+```
+ 
+deploy/crd.yaml:
+```yaml
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: mysqls.otus.homework
+spec:
+  group: otus.homework
+  preserveUnknownFields: false
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            # x-kubernetes-preserve-unknown-fields: false
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+              properties:
+                name:
+                  type: string
+            spec:
+              type: object
+              properties:
+                image:
+                  type: string
+                database:
+                  type: string
+                password:
+                  type: string
+                storage_size:
+                  type: string
+              required: ["image", "database", "password", "storage_size"]
+          required: ["apiVersion", "kind", "metadata", "spec"]
+  scope: Namespaced
+  names:
+    kind: MySQL
+    plural: mysqls
+    singular: mysql
+    shortNames:
+      - ms
+```
+
+### Task \#2:  
+#### Deploy and test operator  
 
