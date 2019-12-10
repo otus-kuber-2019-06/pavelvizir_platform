@@ -483,3 +483,56 @@ kubectl exec -it $MYSQLPOD -- mysql -potuspassword -e "select * from test;" otus
   |  2 | some data-2 |
   +----+-------------+
 ```
+
+### Task \#3:  
+#### Adopt to 1.15
+
+crd.yml:
+```yaml
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: mysqls.otus.homework
+spec:
+  group: otus.homework
+  preserveUnknownFields: false
+  versions:
+    - name: v1
+      served: true
+      storage: true
+  scope: Namespaced
+  names:
+    kind: MySQL
+    plural: mysqls
+    singular: mysql
+    shortNames:
+      - ms
+  validation:
+    openAPIV3Schema:
+      type: object
+      properties:
+        # x-kubernetes-preserve-unknown-fields: false
+        apiVersion:
+          type: string
+        kind:
+          type: string
+        metadata:
+          type: object
+          properties:
+            name:
+              type: string
+        spec:
+          type: object
+          properties:
+            image:
+              type: string
+            database:
+              type: string
+            password:
+              type: string
+            storage_size:
+              type: string
+          required: ["image", "database", "password", "storage_size"]
+      required: ["apiVersion", "kind", "metadata", "spec"]
+```
