@@ -1,0 +1,239 @@
+# kubernetes-templating
+git checkout -b kubernetes-templating
+# preparations
+# install gcloud
+brew cask install google-cloud-sdk
+echo 'source /usr/local/Caskroom/google-cloud-sdk/latest/google-cloud-sdk/completion.bash.inc' >> ~/.bash_profile
+echo 'source /usr/local/Caskroom/google-cloud-sdk/latest/google-cloud-sdk/path.bash.inc' >> ~/.bash_profile
+# prepare cluster
+gcloud init
+gcloud container clusters create gke
+gcloud container clusters create gke --region europe-west4-b
+# gke   europe-west4-b  1.13.11-gke.14  34.90.73.50  n1-standard-1  1.13.11-gke.14  3          RUNNING
+# gcloud beta container clusters get-credentials ... ?
+kubectl get nodes
+# get helm version
+helm version --client
+  Client: &version.Version{SemVer:"v2.12.0", GitCommit:"d325d2a9c179b33af1a024cdb5a4472b6288016a", GitTreeState:"clean"}
+# create tiller sa, rolebinding
+mkdir kubernetes-templating
+cd kubernetes-templating
+cat tiller-sa.yaml
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tiller
+  namespace: kube-system
+
+cat tiller-crb.yaml
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: tiller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  - kind: ServiceAccount
+    name: tiller
+    namespace: kube-system
+
+kubectl apply -f . --recursive
+# install tiller finally
+helm init --service-account=tiller
+helm version
+Client: &version.Version{SemVer:"v2.12.0", GitCommit:"d325d2a9c179b33af1a024cdb5a4472b6288016a", GitTreeState:"clean"}
+Server: &version.Version{SemVer:"v2.12.0", GitCommit:"d325d2a9c179b33af1a024cdb5a4472b6288016a", GitTreeState:"clean"}
+helm repo update
+# Task 1: install nginx-ingress + helm 2 + tiller + cluster-admin
+
+helm upgrade --install nginx-ingress stable/nginx-ingress --wait \
+  --namespace=nginx-ingress \
+  --version=1.11.1
+
+# Task 2: install cert-manager + helm 2 + tiller(ns) + role(ns)
+kubectl create ns cert-manager
+cat tiller-cert-manager-sa.yaml
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tiller-cert-manager
+  namespace: cert-manager
+
+cat tiller-cert-manager-role.yaml
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: tiller-cert-manager
+  namespace: cert-manager
+rules:
+  - apiGroups: ["", "batch", "extensions", "apps"]
+    resources: ["*"]
+    verbs: ["*"]
+
+ cat tiller-cert-manager-rb.yaml
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: tiller-cert-manager
+  namespace: cert-manager
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: tiller-cert-manager
+subjects:
+  - kind: ServiceAccount
+    name: tiller-cert-manager
+    namespace: cert-manager
+
+kubectl apply -f . --recursive
+helm init --tiller-namespace cert-manager --service-account tiller-cert-manager
+helm repo add jetstack https://charts.jetstack.io
+kubectl apply -f https://raw.githubusercontent.com/jetstack/cert-manager/release-0.9/deploy/manifests/00-crds.yaml
+kubectl label namespace cert-manager certmanager.k8s.io/disable-validation="true"
+
+# test cert-manager's tiller rights
+helm upgrade --install cert-manager jetstack/cert-manager --wait \
+  --namespace=nginx-ingress \
+  --version=0.9.0 \
+  --tiller-namespace cert-manager
+# got error, which is OK
+Release "cert-manager" does not exist. Installing it now.
+Error: release cert-manager failed: namespaces "nginx-ingress" is forbidden: User "system:serviceaccount:cert-manager:tiller-cert-manager" cannot get resource "namespaces" in API group "" in the namespace "nginx-ingress"
+# now finally install cert-manager
+helm upgrade --install cert-manager jetstack/cert-manager --wait \
+  --namespace=cert-manager \
+  --version=0.9.0 \
+  --tiller-namespace cert-manager
+
+# and we get error...
+WARNING: Namespace "cert-manager" doesn't match with previous. Release will be deployed to nginx-ingress
+Error: UPGRADE FAILED: "cert-manager" has no deployed releases
+
+# and WARNING it's not a bug
+# UPGRADE FAILED is a bug
+#
+# let's delete FAILED release and install again
+helm delete --purge cert-manager \
+  --tiller-namespace cert-manager
+helm upgrade --install cert-manager jetstack/cert-manager --wait \
+  --namespace=cert-manager \
+  --version=0.9.0 \
+  --tiller-namespace cert-manager \
+--atomic
+
+# and there is no atomic in my old version 
+# install newer helm for these tasks
+curl -O https://get.helm.sh/helm-v2.16.1-darwin-amd64.tar.gz
+tar -zxvf helm-v2.16.1-darwin-amd64.tar.gz
+mv darwin-amd64/helm .
+rm -rf darwin-amd64 helm-v2.16.1-darwin-amd64.tar.gz
+echo 'helm' > .gitignore
+./helm init --tiller-namespace cert-manager --service-account tiller-cert-manager --upgrade
+# repeat atomic
+# and we get new error...
+Release "cert-manager" does not exist. Installing it now.
+INSTALL FAILED
+PURGING CHART
+Error: release cert-manager failed: clusterroles.rbac.authorization.k8s.io is forbidden: User "system:serviceaccount:cert-manager:tiller-cert-manager" cannot create resource "clusterroles" in API group "rbac.authorization.k8s.io" at the cluster scope
+Successfully purged a chart!
+Error: release cert-manager failed: clusterroles.rbac.authorization.k8s.io is forbidden: User "system:serviceaccount:cert-manager:tiller-cert-manager" cannot create resource "clusterroles" in API group "rbac.authorization.k8s.io" at the cluster scope
+# obviously you need cluster scope permissions
+
+# Task 3: Finally install cert-manager
+# let's switch to cluster-admin :-)
+./helm init --service-account=tiller --upgrade
+# install again
+./helm upgrade --install cert-manager jetstack/cert-manager --wait --namespace=cert-manager --version=0.9.0
+Release "cert-manager" does not exist. Installing it now.
+NAME:   cert-manager
+LAST DEPLOYED: Tue Dec 10 19:01:37 2019
+NAMESPACE: cert-manager
+STATUS: DEPLOYED
+# according to docs check status
+kubectl get pods --namespace cert-manager
+cert-manager-6c88899746-cn6zx              1/1     Running   0          3m20s
+cert-manager-cainjector-588c566949-g7z9g   1/1     Running   0          3m20s
+cert-manager-webhook-674d789c56-vzpqq      1/1     Running   0          3m20s
+# create cluster issuer
+# get used api-version, because docs list new api-versions, api-resources, packages etc
+kubectl api-versions | grep certmanager
+# certmanager.k8s.io/v1alpha1
+cat clusterissuer.yaml
+---
+# apiVersion: cert-manager.io/v1alpha2
+apiVersion: certmanager.k8s.io/v1alpha1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    # You must replace this email address with your own.
+    # Let's Encrypt will use this to contact you about expiring
+    # certificates, and issues related to your account.
+    email: pavel.vizir@yandex.ru
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    privateKeySecretRef:
+      # Secret resource used to store the account's private key.
+      name: example-issuer-account-key
+    # Add a single challenge solver, HTTP01 using nginx
+    solvers:
+      - http01:
+          ingress:
+            class: nginx
+
+kubectl apply -f cert-manager/cluster-issuer.yam
+# finally
+# now move everything to cert-manager dir
+mkdir cert-manager
+mv *.yaml cert-manager
+
+# now to chartmuseum
+# let's use helm-tiller now
+# Task 4: install chartmuseum + helm 2 + helm-tiller 
+# install plugin
+./helm plugin install https://github.com/rimusz/helm-tiller
+./helm plugin list
+tiller  0.9.3   Start a Tiller server locally, aka Tillerless Helm
+# customize chart
+mkdir chartmuseum
+# find values.yaml from version 2.3.2.... multiple blames etc
+# https://github.com/helm/charts/blob/f844a4304a95ec7329a809daea8fad592f591618/stable/chartmuseum/values.yaml
+# now enable ingress, let's encrypt
+# get ingress ip and put it into values
+cat chartmuseum/values.yaml
+---
+ingress:
+  enabled: true
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    kubernetes.io/tls-acme: "true"
+    certmanager.k8s.io/cluster-issuer: "example-issuer-account-key"
+    certmanager.k8s.io/acme-challenge-type: http01
+  hosts:
+    - name: chartmuseum.35.234.174.147.nip.io
+      path: /
+      tls: true
+      tlsSecret: chartmuseum.35.234.174.147.nip.io
+
+export HELM_TILLER_STORAGE=configmap
+
+./helm tiller run \
+  helm upgrade --install chartmuseum stable/chartmuseum --wait \
+  --namespace=chartmuseum \
+  --version=2.3.2 \
+  -f chartmuseum/values.yaml
+# success! recheck
+./helm status chartmuseum
+LAST DEPLOYED: Tue Dec 10 19:59:42 2019
+NAMESPACE: chartmuseum
+STATUS: DEPLOYED
+
+# check URL
+https://chartmuseum.35.234.174.147.xip.io/
