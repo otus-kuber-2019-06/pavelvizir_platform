@@ -149,3 +149,87 @@ kubectl apply -f deploy/cr.yaml
 # error: error validating "deploy/cr.yaml": error validating data: ValidationError(MySQL): missing required field "apiVerions" in homework.otus.v1.MySQL; if you choose to ignore these errors, turn validation off with --validate=false
 
 # now to operators
+curl -LO https://gist.github.com/Evgenikk/581fa5bba6d924a3438be1e3d31aa468/raw/99429270c474cc434748e1058919e27df01d9a48/service-account.yml
+curl -LO https://gist.github.com/Evgenikk/581fa5bba6d924a3438be1e3d31aa468/raw/99429270c474cc434748e1058919e27df01d9a48/role.yml
+curl -LO https://gist.github.com/Evgenikk/581fa5bba6d924a3438be1e3d31aa468/raw/99429270c474cc434748e1058919e27df01d9a48/ClusterRoleBinding.yml
+curl -LO https://gist.github.com/Evgenikk/581fa5bba6d924a3438be1e3d31aa468/raw/619023d01e49ca3702357d4fded4d054cd523a9a/deploy-operator.yml
+mv *.yml deploy/
+# prettify all dled yml
+vim $(find deploy/ -name *.yml)
+# rename previous files for consistency
+mv deploy/cr.yaml deploy/cr.yml
+mv deploy/crd.yaml deploy/crd.yml
+mv deploy/ClusterRoleBinding.yml deploy/role-binding.yml
+# now deploy everything
+for i in crd cr service-account role role-binding deploy-operator; do kubectl apply -f deploy/$i.yml; done
+# wait a bit, then check pvc was created
+kubectl get pvc
+backup-mysql-instance-pvc   Bound    pvc-fa31bd64-474a-479e-a46c-790d7ce6c46a   1Gi        RWO            standard       98s
+mysql-instance-pvc          Bound    pvc-530e2339-f65a-437b-ba72-04c9fee45cb4   1Gi        RWO            standard       99s
+# now test it
+# first fill the database with data
+export MYSQLPOD=$(kubectl get pods -l app=mysql-instance -o jsonpath="{.items[*].metadata.name}")
+kubectl exec -it $MYSQLPOD -- mysql -u root  -potuspassword -e "CREATE TABLE test ( id smallint unsigned not null auto_increment, name varchar(20) not null, constraint pk_example primary key (id) );" otus-database
+kubectl exec -it $MYSQLPOD -- mysql -potuspassword  -e "INSERT INTO test ( id, name ) VALUES ( null, 'some data' );" otus-database
+kubectl exec -it $MYSQLPOD -- mysql -potuspassword -e "INSERT INTO test ( id, name ) VALUES ( null, 'some data-2' );" otus-database
+
+# now check tables's contents
+kubectl exec -it $MYSQLPOD -- mysql -potuspassword -e "select * from test;" otus-database
++----+-------------+
+| id | name        |
++----+-------------+
+|  1 | some data   |
+|  2 | some data-2 |
++----+-------------+
+
+# remove instance
+kubectl delete mysqls.otus.homework mysql-instance
+
+# check pv 
+kubectl get pv # there is no more mysql-instance-pv
+
+# check jobs
+kubectl get jobs.batch
+backup-mysql-instance-job    1/1           2s         2m27s
+
+# recreate instance
+kubectl apply -f deploy/cr.yml
+
+# wait a bit and check for completed job
+kubectl get jobs
+backup-mysql-instance-job    1/1           2s         92s
+restore-mysql-instance-job   1/1           3m17s      3m20s
+
+# now check data
+export MYSQLPOD=$(kubectl get pods -l app=mysql-instance -o jsonpath="{.items[*].metadata.name}")
+kubectl exec -it $MYSQLPOD -- mysql -potuspassword -e "select * from test;" otus-database
++----+-------------+
+| id | name        |
++----+-------------+
+|  1 | some data   |
+|  2 | some data-2 |
++----+-------------+
+# HOORAY!
+
+# now edit README, prepare PR
+#
+
+# Выполнено ДЗ №7
+
+ - [*] Основное ДЗ
+
+## В процессе сделано:
+ - Созданы CustomResource и CustomResourceDefinition:
+   - Адаптированы для 1.16
+   - Добавлены validations
+   - Добавлены required
+ - Практика использования Operators
+
+## Как запустить проект:
+ - `for i in crd cr service-account role role-binding deploy-operator; do kubectl apply -f deploy/$i.yml; done`
+
+## Как проверить работоспособность:
+ - `kubectl get jobs`
+
+## PR checklist:
+ - [*] Выставлен label с номером домашнего задания
