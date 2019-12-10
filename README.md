@@ -12,6 +12,7 @@ pavelvizir Platform repository
 - [Homework-04 aka 'kubernetes-volumes'](#homework-04-aka-kubernetes-volumes)  
 - [Homework-05 aka 'kubernetes-storage'](#homework-05-aka-kubernetes-storage)  
 - [Homework-06 aka 'kubernetes-debug'](#homework-06-aka-kubernetes-debug)  
+- [Homework-07 aka 'kubernetes-operators'](#homework-07-aka-kubernetes-operators)  
 
 ## Homework-01 aka 'kubernetes-intro'  
 [.history-01](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-intro/.history-01)  
@@ -366,3 +367,172 @@ Install iptables-tailer.
 Fix all errors to finally get result with:  
 `kubectl get events -A`  
 
+## Homework-07 aka 'kubernetes-operators'  
+[.history-07](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-operators/.history-07)  
+### Task \#1:  
+#### Create CR and CRD, make validations, adopt to 1.16
+
+deploy/cr.yaml:
+```yaml
+---
+apiVersion: otus.homework/v1
+kind: MySQL
+metadata:
+  name: mysql-instance
+spec:
+  image: mysql:5.7
+  database: otus-database
+  password: otuspassword
+  storage_size: 1Gi
+# useless_data: "useless info
+```
+ 
+deploy/crd.yaml:
+```yaml
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: mysqls.otus.homework
+spec:
+  group: otus.homework
+  preserveUnknownFields: false
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            # x-kubernetes-preserve-unknown-fields: false
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+              properties:
+                name:
+                  type: string
+            spec:
+              type: object
+              properties:
+                image:
+                  type: string
+                database:
+                  type: string
+                password:
+                  type: string
+                storage_size:
+                  type: string
+              required: ["image", "database", "password", "storage_size"]
+          required: ["apiVersion", "kind", "metadata", "spec"]
+  scope: Namespaced
+  names:
+    kind: MySQL
+    plural: mysqls
+    singular: mysql
+    shortNames:
+      - ms
+```
+
+### Task \#2:  
+#### Deploy and test operator  
+
+```sh
+# deploy
+for i in crd cr service-account role role-binding deploy-operator; do kubectl apply -f deploy/$i.yml; done
+# check pvc
+kubectl get pvc
+  backup-mysql-instance-pvc   Bound    pvc-fa31bd64-474a-479e-a46c-790d7ce6c46a   1Gi        RWO            standard       98s
+  mysql-instance-pvc          Bound    pvc-530e2339-f65a-437b-ba72-04c9fee45cb4   1Gi        RWO            standard       99s
+# fill database with data
+export MYSQLPOD=$(kubectl get pods -l app=mysql-instance -o jsonpath="{.items[*].metadata.name}")
+kubectl exec -it $MYSQLPOD -- mysql -u root  -potuspassword -e "CREATE TABLE test ( id smallint unsigned not null auto_increment, name varchar(20) not null, constraint pk_example primary key (id) );" otus-database
+kubectl exec -it $MYSQLPOD -- mysql -potuspassword  -e "INSERT INTO test ( id, name ) VALUES ( null, 'some data' );" otus-database
+kubectl exec -it $MYSQLPOD -- mysql -potuspassword -e "INSERT INTO test ( id, name ) VALUES ( null, 'some data-2' );" otus-database
+# check table's contents
+kubectl exec -it $MYSQLPOD -- mysql -potuspassword -e "select * from test;" otus-database
+  +----+-------------+
+  | id | name        |
+  +----+-------------+
+  |  1 | some data   |
+  |  2 | some data-2 |
+  +----+-------------+
+# remove instance
+kubectl delete mysqls.otus.homework mysql-instance
+# check pv 
+kubectl get pv # there is no more mysql-instance-pv
+# check jobs
+kubectl get jobs.batch
+  backup-mysql-instance-job    1/1           2s         2m27s
+# recreate instance
+kubectl apply -f deploy/cr.yml
+# wait a bit and check for completed job
+kubectl get jobs
+  backup-mysql-instance-job    1/1           2s         92s
+  restore-mysql-instance-job   1/1           3m17s      3m20s
+# now check data
+export MYSQLPOD=$(kubectl get pods -l app=mysql-instance -o jsonpath="{.items[*].metadata.name}")
+kubectl exec -it $MYSQLPOD -- mysql -potuspassword -e "select * from test;" otus-database
+  +----+-------------+
+  | id | name        |
+  +----+-------------+
+  |  1 | some data   |
+  |  2 | some data-2 |
+  +----+-------------+
+```
+
+### Task \#3:  
+#### Adopt to 1.15
+
+crd.yml:
+```yaml
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: mysqls.otus.homework
+spec:
+  group: otus.homework
+  preserveUnknownFields: false
+  versions:
+    - name: v1
+      served: true
+      storage: true
+  scope: Namespaced
+  names:
+    kind: MySQL
+    plural: mysqls
+    singular: mysql
+    shortNames:
+      - ms
+  validation:
+    openAPIV3Schema:
+      type: object
+      properties:
+        # x-kubernetes-preserve-unknown-fields: false
+        apiVersion:
+          type: string
+        kind:
+          type: string
+        metadata:
+          type: object
+          properties:
+            name:
+              type: string
+        spec:
+          type: object
+          properties:
+            image:
+              type: string
+            database:
+              type: string
+            password:
+              type: string
+            storage_size:
+              type: string
+          required: ["image", "database", "password", "storage_size"]
+      required: ["apiVersion", "kind", "metadata", "spec"]
+```

@@ -1,0 +1,287 @@
+# start hw-07 aka kubernetes-operators
+# usual preparations
+git checkout -b kubernetes-operators
+mkdir kubernetes-operators
+cd kubernetes-operators
+minikube start
+mkdir deploy
+# now let's go
+# Task #1: Create CustomResource and CRD
+vim deploy/cr.yaml:
+---
+apiVersion: otus.homework/v1
+kind: MySQL
+metadata:
+  name: mysql-instance
+spec:
+  image: mysql:5.7
+  database: otus-database
+  password: otuspassword
+  storage_size: 1Gi
+useless_data: "useless info"
+
+kubectl apply -f deploy/cr.yaml
+# ERROR: error: unable to recognize "deploy/cr.yaml": no matches for kind "MySQL" in version "otus.homework/v1"
+
+# let's create CRD then to define kind MySQL
+vim deploy/crd.yaml:
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: mysqls.otus.homework
+spec:
+  scope: Namespaced
+  group: otus.homework
+  versions:
+    - name: v1
+      served: true
+      storage: true
+  names:
+    kind: MySQL
+    plural: mysqls
+    singular: mysql
+    shortNames:
+      - ms
+
+kubectl apply -f deploy/crd.yaml
+kubectl apply -f deploy/cr.yaml
+# now no errors. Let's play a bit
+kubectl get crd
+kubectl get mysqls.otus.homework
+kubectl describe ms mysql-instance
+
+# let's create validations
+vim deploy/crd.yaml: # at the bottom
+  validation:
+    openAPIV3Schema:
+      type: object
+      properties:
+        apiVersion:
+          type: string
+        kind:
+          type: string
+        metadata:
+          type: object
+          properties:
+            name:
+              type: string
+        spec:
+          type: object
+          properties:
+            image:
+              type: string
+            database:
+              type: string
+            password:
+              type: string
+            storage_size:
+              type: string
+
+kubectl delete ms mqsql-instance
+kubectl apply -f deploy/crd.yaml; kubectl apply -f deploy/cr.yaml
+# validation doesn't work :-(
+# turns out 'apiextensions.k8s.io/v1beta1' deprecated in 1.16 
+# https://kubernetes.io/docs/tasks/access-kubernetes-api/custom-resources/custom-resource-definitions/#validation
+# let's try 'apiextensions.k8s.io/v1'
+# TOOK SOME TIME to find out how 'preserveUnknownFields' and 'x-kubernetes-preserve-unknown-fields' work FFS
+# 1.16 default - preserve unknown fields it seems :-(
+# https://github.com/kubernetes/kubernetes/blob/master/CHANGELOG-1.16.md
+vim deploy/crd.yaml:
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: mysqls.otus.homework
+spec:
+  group: otus.homework
+  preserveUnknownFields: false
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            # x-kubernetes-preserve-unknown-fields: false
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+              properties:
+                name:
+                  type: string
+            spec:
+              type: object
+              properties:
+                image:
+                  type: string
+                database:
+                  type: string
+                password:
+                  type: string
+                storage_size:
+                  type: string
+  scope: Namespaced
+  names:
+    kind: MySQL
+    plural: mysqls
+    singular: mysql
+    shortNames:
+      - ms
+
+# and finally i see validation error! HOORAY!
+kubectl apply -f deploy/cr.yaml
+# error: error validating "deploy/cr.yaml": error validating data: ValidationError(MySQL): unknown field "useless_data" in homework.otus.v1.MySQL; if you choose to ignore these errors, turn validation off with --validate=false
+
+# now comment out useless_data field and everything works
+
+# Task 02: Make all fields required 
+vim deploy/crd.yaml: # add list of requirements
+              required: ["image", "database", "password", "storage_size"]
+          required: ["apiVersion", "kind", "metadata", "spec"]
+
+# test it simply by making mistake in required list, like that:
+kubectl apply -f deploy/cr.yaml
+# error: error validating "deploy/cr.yaml": error validating data: ValidationError(MySQL): missing required field "apiVerions" in homework.otus.v1.MySQL; if you choose to ignore these errors, turn validation off with --validate=false
+
+# now to operators
+curl -LO https://gist.github.com/Evgenikk/581fa5bba6d924a3438be1e3d31aa468/raw/99429270c474cc434748e1058919e27df01d9a48/service-account.yml
+curl -LO https://gist.github.com/Evgenikk/581fa5bba6d924a3438be1e3d31aa468/raw/99429270c474cc434748e1058919e27df01d9a48/role.yml
+curl -LO https://gist.github.com/Evgenikk/581fa5bba6d924a3438be1e3d31aa468/raw/99429270c474cc434748e1058919e27df01d9a48/ClusterRoleBinding.yml
+curl -LO https://gist.github.com/Evgenikk/581fa5bba6d924a3438be1e3d31aa468/raw/619023d01e49ca3702357d4fded4d054cd523a9a/deploy-operator.yml
+mv *.yml deploy/
+# prettify all dled yml
+vim $(find deploy/ -name *.yml)
+# rename previous files for consistency
+mv deploy/cr.yaml deploy/cr.yml
+mv deploy/crd.yaml deploy/crd.yml
+mv deploy/ClusterRoleBinding.yml deploy/role-binding.yml
+# now deploy everything
+for i in crd cr service-account role role-binding deploy-operator; do kubectl apply -f deploy/$i.yml; done
+# wait a bit, then check pvc was created
+kubectl get pvc
+backup-mysql-instance-pvc   Bound    pvc-fa31bd64-474a-479e-a46c-790d7ce6c46a   1Gi        RWO            standard       98s
+mysql-instance-pvc          Bound    pvc-530e2339-f65a-437b-ba72-04c9fee45cb4   1Gi        RWO            standard       99s
+# now test it
+# first fill the database with data
+export MYSQLPOD=$(kubectl get pods -l app=mysql-instance -o jsonpath="{.items[*].metadata.name}")
+kubectl exec -it $MYSQLPOD -- mysql -u root  -potuspassword -e "CREATE TABLE test ( id smallint unsigned not null auto_increment, name varchar(20) not null, constraint pk_example primary key (id) );" otus-database
+kubectl exec -it $MYSQLPOD -- mysql -potuspassword  -e "INSERT INTO test ( id, name ) VALUES ( null, 'some data' );" otus-database
+kubectl exec -it $MYSQLPOD -- mysql -potuspassword -e "INSERT INTO test ( id, name ) VALUES ( null, 'some data-2' );" otus-database
+
+# now check tables's contents
+kubectl exec -it $MYSQLPOD -- mysql -potuspassword -e "select * from test;" otus-database
++----+-------------+
+| id | name        |
++----+-------------+
+|  1 | some data   |
+|  2 | some data-2 |
++----+-------------+
+
+# remove instance
+kubectl delete mysqls.otus.homework mysql-instance
+
+# check pv 
+kubectl get pv # there is no more mysql-instance-pv
+
+# check jobs
+kubectl get jobs.batch
+backup-mysql-instance-job    1/1           2s         2m27s
+
+# recreate instance
+kubectl apply -f deploy/cr.yml
+
+# wait a bit and check for completed job
+kubectl get jobs
+backup-mysql-instance-job    1/1           2s         92s
+restore-mysql-instance-job   1/1           3m17s      3m20s
+
+# now check data
+export MYSQLPOD=$(kubectl get pods -l app=mysql-instance -o jsonpath="{.items[*].metadata.name}")
+kubectl exec -it $MYSQLPOD -- mysql -potuspassword -e "select * from test;" otus-database
++----+-------------+
+| id | name        |
++----+-------------+
+|  1 | some data   |
+|  2 | some data-2 |
++----+-------------+
+# HOORAY!
+
+# now edit README, prepare PR
+#
+
+# Выполнено ДЗ №7
+
+ - [*] Основное ДЗ
+
+## В процессе сделано:
+ - Созданы CustomResource и CustomResourceDefinition:
+   - Адаптированы для 1.16
+   - Добавлены validations
+   - Добавлены required
+ - Практика использования Operators
+
+## Как запустить проект:
+ - `for i in crd cr service-account role role-binding deploy-operator; do kubectl apply -f deploy/$i.yml; done`
+
+## Как проверить работоспособность:
+ - `kubectl get jobs`
+
+## PR checklist:
+ - [*] Выставлен label с номером домашнего задания
+
+# tests failed due to versions mismatch
+# let's adopt to 1.15 then
+cp -r deploy deploy-1.16
+kind create cluster --image kindest/node:v1.15.6
+# change CRD apiVersion to v1beta1 and move schema to validation
+---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: mysqls.otus.homework
+spec:
+  group: otus.homework
+  preserveUnknownFields: false
+  versions:
+    - name: v1
+      served: true
+      storage: true
+  scope: Namespaced
+  names:
+    kind: MySQL
+    plural: mysqls
+    singular: mysql
+    shortNames:
+      - ms
+  validation:
+    openAPIV3Schema:
+      type: object
+      properties:
+        # x-kubernetes-preserve-unknown-fields: false
+        apiVersion:
+          type: string
+        kind:
+          type: string
+        metadata:
+          type: object
+          properties:
+            name:
+              type: string
+        spec:
+          type: object
+          properties:
+            image:
+              type: string
+            database:
+              type: string
+            password:
+              type: string
+            storage_size:
+              type: string
+          required: ["image", "database", "password", "storage_size"]
+      required: ["apiVersion", "kind", "metadata", "spec"]
