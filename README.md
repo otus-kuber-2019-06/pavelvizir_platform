@@ -13,6 +13,7 @@ pavelvizir Platform repository
 - [Homework-05 aka 'kubernetes-storage'](#homework-05-aka-kubernetes-storage)  
 - [Homework-06 aka 'kubernetes-debug'](#homework-06-aka-kubernetes-debug)  
 - [Homework-07 aka 'kubernetes-operators'](#homework-07-aka-kubernetes-operators)  
+- [Homework-10 aka 'kubernetes-templating'](#homework-10-aka-kubernetes-templating)  
 
 ## Homework-01 aka 'kubernetes-intro'  
 [.history-01](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-intro/.history-01)  
@@ -536,3 +537,45 @@ spec:
           required: ["image", "database", "password", "storage_size"]
       required: ["apiVersion", "kind", "metadata", "spec"]
 ```
+
+## Homework-10 aka 'kubernetes-templating'  
+[.history-10](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-templating/.history-10)  
+### Task \#1:  
+#### Install nginx-ingress + helm 2 + tiller + cluster-admin  
+
+[Log Task1](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-templating/.history-10#L51-L56)  
+
+### Task \#2:  
+#### Install cert-manager + helm 2 + tiller(ns) + role(ns)  
+
+[Log Task2](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-templating/.history-10#L57-L147)  
+
+### Task \#3:  
+#### Finally install cert-manager  
+
+[Log Task3](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-templating/.history-10#L149-L198)  
+
+### Task \#4:  
+#### Install chartmuseum + helm 2 + helm-tiller  
+
+[Log Task4](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-templating/.history-10#L199-L239)  
+
+### Task \#5:  
+#### Install harbor + helm3  
+
+[Log Task5](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-templating/.history-10#L241-L287)  
+
+### Task \#6:  
+#### Create helm chart  
+
+[Log Task6](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-templating/.history-10#L289-L325)  
+
+### Task \#7:  
+#### Kubecfg  
+
+[Log Task7](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-templating/.history-10#L327-L342)  
+
+### Task \#8:  
+#### Kustomize  
+
+[Log Task8](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-templating/.history-10#L344-L354)  
