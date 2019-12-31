@@ -1,592 +1,11 @@
-# pavelvizir_platform
-pavelvizir Platform repository  
-
-[![Build Status](https://travis-ci.com/otus-kuber-2019-06/pavelvizir_platform.svg?branch=master)](https://travis-ci.com/otus-kuber-2019-06/pavelvizir_platform)
-
-[Link to docker hub](https://hub.docker.com/r/pavelvizir)
-
-# Table of contents:  
-- [Homework-01 aka 'kubernetes-intro'](#homework-01-aka-kubernetes-intro)  
-- [Homework-02 aka 'kubernetes-security'](#homework-02-aka-kubernetes-security)  
-- [Homework-03 aka 'kubernetes-networks'](#homework-03-aka-kubernetes-networks)  
-- [Homework-04 aka 'kubernetes-volumes'](#homework-04-aka-kubernetes-volumes)  
-- [Homework-05 aka 'kubernetes-storage'](#homework-05-aka-kubernetes-storage)  
-- [Homework-06 aka 'kubernetes-debug'](#homework-06-aka-kubernetes-debug)  
-- [Homework-07 aka 'kubernetes-operators'](#homework-07-aka-kubernetes-operators)  
-- [Homework-10 aka 'kubernetes-templating'](#homework-10-aka-kubernetes-templating)  
-- [Homework-11 aka 'kubernetes-vault'](#homework-11-aka-kubernetes-vault)  
-
-## Homework-01 aka 'kubernetes-intro'  
-[.history-01](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-intro/.history-01)  
-### Task \#1:  
-#### How pods get recreated in kube-system
-
-`kubectl delete pod --all -n kube-system`
-
-> kube-apiserver = static pod, contolled by kubelet directly (/etc/kubernetes/manifests/kube-apiserver.yaml)  
-> core-dns = normal pod in deployment, deployment controller, replicas > 0  
-
-### Task \#2:  
-#### Make everything in homework
-
-[.history-01](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-intro/.history-01)  
-
-## Homework-02 aka 'kubernetes-security'  
-[.history-02](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-security/.history-02)  
-### Tasks \#01, \#02, \#03:  
-#### Play with service accounts, roles, (cluster)RoleBindings  
-
-[.history-02](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-security/.history-02)  
-
-## Homework-03 aka 'kubernetes-networks'  
-[.history-03](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-networks/.history-03)  
-### Task \#1:  
-#### What's wrong with the following probe? Any chance to use it with purpose?  
-```sh
-livenessProbe:
-  exec:
-    command:
-      - 'sh'
-      - '-c'
-      - 'ps aux | grep my_web_server_process'
-```
-> 1. Checking for main process is strange. You should aim to make it exit on errors.  
-> 2. Checking for secondary process i suppose.  
-
-### Task \#2:  
-#### Play with strategy  
-```yaml
-strategy:
-  type: RollingUpdate
-  rollingUpdate:
-    maxUnavailable: 0
-    maxSurge: 100%
-```
-kubectl get events --watch 
-> brew install kubespy
-> Disappointment: kubespy uses deprecated API :-(
-
-### Task \#3:
-#### Play with services
-
-```yaml
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: web-svc-cip
-spec:
-  selector:
-    app: web
-  type: ClusterIP
-  ports:
-    - protocol: TCP
-      port: 80
-      targetPort: 8000
-```
-
-> Interesting dive into how it works and games with IPVS  
-
-### Task \#4:
-#### Play with Metallb
-
-[.history-03](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-networks/.history-03#L142-L185)  
-
-### Task \#5:
-#### Play with ingress
-
-[.history-03](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-networks/.history-03#L190-L247)  
-
-## Homework-04 aka 'kubernetes-volumes'  
-[.history-04](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-volumes/.history-04)  
-### Task \#1:  
-#### Install kind and MinIO  
-
-```sh 
-brew install kind minio/stable/mc
-kind create cluster
-kubectl apply -f . --recursive
-```
-Test it:  
-```sh
-mc ls
-kubectl get statefulsets
-kubectl get pods
-kugectl get pvc
-kubectl get pv
-```
-Clean up:
-```sh
-kind delete cluster
-```
-
-## Homework-05 aka 'kubernetes-storage'  
-[.history-05](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-storage/.history-05)  
-### Task \#1:  
-#### Prepare cluster.yaml (feature gates to enable CSI snapshots)  
-
-```yaml
----
-apiVersion: kind.sigs.k8s.io/v1alpha3
-kind: Cluster
-kubeadmConfigPatches:
-  - |
-    apiVersion: kubeadm.k8s.io/v1beta2
-    kind: ClusterConfiguration
-    metadata:
-      name: config
-    apiServer:
-      extraArgs:
-        "feature-gates": "VolumeSnapshotDataSource=true"
-    scheduler:
-      extraArgs:
-        "feature-gates": "VolumeSnapshotDataSource=true"
-    controllerManager:
-      extraArgs:
-        "feature-gates": "VolumeSnapshotDataSource=true"
-  - |
-    apiVersion: kubeadm.k8s.io/v1beta2
-    kind: InitConfiguration
-    metadata:
-      name: config
-    nodeRegistration:
-      kubeletExtraArgs:
-        "feature-gates": "VolumeSnapshotDataSource=true"
-```
-
-### Task \#2:  
-#### Create StorageClass for CSI Host Path Driver  
-
-```yaml
----
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
-  name: my-storageclass
-provisioner: hostpath.csi.k8s.io
-reclaimPolicy: Delete
-volumeBindingMode: Immediate
-allowVolumeExpansion: true
-```
-
-### Task \#3:  
-#### Create PVC with name storage-pvc  
-
-```yaml
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: storage-pvc
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 1Gi
-  storageClassName: my-storageclass
-```
-
-### Task \#4:  
-#### Create Pod with name storage-pod  
-> Mount storage into /data  
-
-```yaml
----
-apiVersion: v1
-kind: Pod
-metadata:
-  name: storage-pod
-spec:
-  restartPolicy: Always
-  containers:
-    - image: gcr.io/google_containers/busybox
-      command: ["/bin/sh", "-c"]
-      args: ["tail -f /dev/null"]
-      name: busybox
-      volumeMounts:
-        - name: storage-volume
-          mountPath: /data
-  volumes:
-    - name: storage-volume
-      persistentVolumeClaim:
-        claimName: storage-pvc
-```
-
-### Task \#5:  
-#### Test snapshots finally  
-> Snapshot and restore manifests further down, first goes shell test commands  
-
-```sh
-# write some data
-kubectl exec -it storage-pod -- /bin/sh
- cat /dev/urandom | env LC_CTYPE=C tr -dc A-Za-z0-9 | head -c $(expr 79) | tee /data/storage-file
- exit
-# create snapshot
-kubectl apply -f 04_Snapshot.yaml
-# delete data
-kubectl exec -it storage-pod -- /bin/sh -c 'rm -f /data/storage-file'
-kubectl apply -f 05_RestoreSnapshot.yaml
-# The PersistentVolumeClaim "storage-pvc" is invalid: spec: Forbidden: is immutable after creation except resources.requests for bound claims  
-# :-(
-# delete pvc
-kubectl delete pods storage-pod
-kubectl delete pvc storage-pvc
-# restore snapshot
-kubectl apply -f 05_RestoreSnapshot.yaml
-# recrete pod and read data
-kubectl exec -it storage-pod -- /bin/sh -c 'cat /data/storage-file'
-7cq6RytcqmsSEFYQHpKQ3V5Uemg8RQCTuBQ1XTlPBSu0Bv3rZfi1vVhjCOa0x30G7HKLr84arYgBPtz
-# HOORAY! OK
-```
-
-```yaml
----
-apiVersion: snapshot.storage.k8s.io/v1alpha1
-kind: VolumeSnapshot
-metadata:
-  name: storage-snapshot
-spec:
-  snapshotClassName: csi-hostpath-snapclass
-  source:
-    name: storage-pvc
-    kind: PersistentVolumeClaim
-```
-
-```yaml
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: storage-pvc
-spec:
-  storageClassName: my-storageclass
-  dataSource:
-    name: storage-snapshot
-    kind: VolumeSnapshot
-    apiGroup: snapshot.storage.k8s.io
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 1Gi
-```
-
-### Task \#X:  
-#### Overcoming tests  
-> 1. Travis tests expect *bash* to be available,  
-> so had to change image and command  
-
-> 2. Travies tests expect storage class name = 'csi-hostpath-sc'
-
-From:  
-```
-- image: gcr.io/google_containers/busybox
-  command: ["/bin/sh", "-c"]
-```
-To:  
-```
-- image: ubuntu:18.04
-  command: ["/bin/bash", "-ec"]
-```
-Perform snapshots test again:  
-[Updated test run from .history-05](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-storage/.history-05#L212-L234)  
-
-Update (change storage class name):
-```sh
-sed -i '' 's/my-storageclass/csi-hostpath-sc/' $(rg storageclass . -l)       
-```
-Perform snapshots test again:  
-[Updated test run from .history-05](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-storage/.history-05#L241-L256)  
-
-## Homework-06 aka 'kubernetes-debug'  
-[.history-06](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-debug/.history-06)  
-### Task \#1:  
-#### Make strace work in kubectl debug  
-[.history-06-kubectl-debug](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-debug/.history-06#L1-L31)  
-
-> It works now
-
-Because of:
-```
-docker inspect b9168fb3402f:
-...
-            "CapAdd": [
-                "SYS_PTRACE",
-                "SYS_ADMIN"
-            ],
-```
- because of:
-[kubectl debug source code](https://github.com/aylei/kubectl-debug/blob/ca81bf784bc6570fb14b7c3ac4004d5b70853515/pkg/agent/runtime.go#L211)
-```
-CapAdd:      strslice.StrSlice([]string{"SYS_PTRACE", "SYS_ADMIN"}),
-```
-
-The easiest way to fail it is to empty CapAdd string and recompile
-
-### Task \#2:  
-#### Practice with iptables-tailer  
-[.history-06-iptables-tailer](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-debug/.history-06#L33-L108)  
-
-Install test app - netperf-operator:  
-```sh
-for i in crd rbac operator cr
-do
-  curl -O https://raw.githubusercontent.com/piontec/netperf-operator/master/deploy/$i.yaml
-  kubectl apply -f $i.yaml
-done        
-```
-
-Now create calico policy:
-```yaml
----
-apiVersion: crd.projectcalico.org/v1
-kind: NetworkPolicy
-metadata:
-  name: netperf-calico-policy
-  labels:
-spec:
-  order: 10
-  selector: app == "netperf-operator"
-  ingress:
-    - action: Allow
-      source:
-        selector: netperf-role == "netperf-client"
-    - action: Log
-    - action: Deny
-  egress:
-    - action: Allow
-      destination:
-        selector: netperf-role == "netperf-client"
-    - action: Log
-    - action: Deny
-```
-
-Create service account, role, rolebinding for iptables-tailer.  
-
-Install iptables-tailer.  
-
-Fix all errors to finally get result with:  
-`kubectl get events -A`  
-
-## Homework-07 aka 'kubernetes-operators'  
-[.history-07](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-operators/.history-07)  
-### Task \#1:  
-#### Create CR and CRD, make validations, adopt to 1.16
-
-deploy/cr.yaml:
-```yaml
----
-apiVersion: otus.homework/v1
-kind: MySQL
-metadata:
-  name: mysql-instance
-spec:
-  image: mysql:5.7
-  database: otus-database
-  password: otuspassword
-  storage_size: 1Gi
-# useless_data: "useless info
-```
- 
-deploy/crd.yaml:
-```yaml
----
-apiVersion: apiextensions.k8s.io/v1
-kind: CustomResourceDefinition
-metadata:
-  name: mysqls.otus.homework
-spec:
-  group: otus.homework
-  preserveUnknownFields: false
-  versions:
-    - name: v1
-      served: true
-      storage: true
-      schema:
-        openAPIV3Schema:
-          type: object
-          properties:
-            # x-kubernetes-preserve-unknown-fields: false
-            apiVersion:
-              type: string
-            kind:
-              type: string
-            metadata:
-              type: object
-              properties:
-                name:
-                  type: string
-            spec:
-              type: object
-              properties:
-                image:
-                  type: string
-                database:
-                  type: string
-                password:
-                  type: string
-                storage_size:
-                  type: string
-              required: ["image", "database", "password", "storage_size"]
-          required: ["apiVersion", "kind", "metadata", "spec"]
-  scope: Namespaced
-  names:
-    kind: MySQL
-    plural: mysqls
-    singular: mysql
-    shortNames:
-      - ms
-```
-
-### Task \#2:  
-#### Deploy and test operator  
-
-```sh
-# deploy
-for i in crd cr service-account role role-binding deploy-operator; do kubectl apply -f deploy/$i.yml; done
-# check pvc
-kubectl get pvc
-  backup-mysql-instance-pvc   Bound    pvc-fa31bd64-474a-479e-a46c-790d7ce6c46a   1Gi        RWO            standard       98s
-  mysql-instance-pvc          Bound    pvc-530e2339-f65a-437b-ba72-04c9fee45cb4   1Gi        RWO            standard       99s
-# fill database with data
-export MYSQLPOD=$(kubectl get pods -l app=mysql-instance -o jsonpath="{.items[*].metadata.name}")
-kubectl exec -it $MYSQLPOD -- mysql -u root  -potuspassword -e "CREATE TABLE test ( id smallint unsigned not null auto_increment, name varchar(20) not null, constraint pk_example primary key (id) );" otus-database
-kubectl exec -it $MYSQLPOD -- mysql -potuspassword  -e "INSERT INTO test ( id, name ) VALUES ( null, 'some data' );" otus-database
-kubectl exec -it $MYSQLPOD -- mysql -potuspassword -e "INSERT INTO test ( id, name ) VALUES ( null, 'some data-2' );" otus-database
-# check table's contents
-kubectl exec -it $MYSQLPOD -- mysql -potuspassword -e "select * from test;" otus-database
-  +----+-------------+
-  | id | name        |
-  +----+-------------+
-  |  1 | some data   |
-  |  2 | some data-2 |
-  +----+-------------+
-# remove instance
-kubectl delete mysqls.otus.homework mysql-instance
-# check pv 
-kubectl get pv # there is no more mysql-instance-pv
-# check jobs
-kubectl get jobs.batch
-  backup-mysql-instance-job    1/1           2s         2m27s
-# recreate instance
-kubectl apply -f deploy/cr.yml
-# wait a bit and check for completed job
-kubectl get jobs
-  backup-mysql-instance-job    1/1           2s         92s
-  restore-mysql-instance-job   1/1           3m17s      3m20s
-# now check data
-export MYSQLPOD=$(kubectl get pods -l app=mysql-instance -o jsonpath="{.items[*].metadata.name}")
-kubectl exec -it $MYSQLPOD -- mysql -potuspassword -e "select * from test;" otus-database
-  +----+-------------+
-  | id | name        |
-  +----+-------------+
-  |  1 | some data   |
-  |  2 | some data-2 |
-  +----+-------------+
-```
-
-### Task \#3:  
-#### Adopt to 1.15
-
-crd.yml:
-```yaml
----
-apiVersion: apiextensions.k8s.io/v1beta1
-kind: CustomResourceDefinition
-metadata:
-  name: mysqls.otus.homework
-spec:
-  group: otus.homework
-  preserveUnknownFields: false
-  versions:
-    - name: v1
-      served: true
-      storage: true
-  scope: Namespaced
-  names:
-    kind: MySQL
-    plural: mysqls
-    singular: mysql
-    shortNames:
-      - ms
-  validation:
-    openAPIV3Schema:
-      type: object
-      properties:
-        # x-kubernetes-preserve-unknown-fields: false
-        apiVersion:
-          type: string
-        kind:
-          type: string
-        metadata:
-          type: object
-          properties:
-            name:
-              type: string
-        spec:
-          type: object
-          properties:
-            image:
-              type: string
-            database:
-              type: string
-            password:
-              type: string
-            storage_size:
-              type: string
-          required: ["image", "database", "password", "storage_size"]
-      required: ["apiVersion", "kind", "metadata", "spec"]
-```
-
-## Homework-10 aka 'kubernetes-templating'  
-[.history-10](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-templating/.history-10)  
-### Task \#1:  
-#### Install nginx-ingress + helm 2 + tiller + cluster-admin  
-
-[Log Task1](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-templating/.history-10#L51-L56)  
-
-### Task \#2:  
-#### Install cert-manager + helm 2 + tiller(ns) + role(ns)  
-
-[Log Task2](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-templating/.history-10#L57-L147)  
-
-### Task \#3:  
-#### Finally install cert-manager  
-
-[Log Task3](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-templating/.history-10#L149-L198)  
-
-### Task \#4:  
-#### Install chartmuseum + helm 2 + helm-tiller  
-
-[Log Task4](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-templating/.history-10#L199-L239)  
-
-### Task \#5:  
-#### Install harbor + helm3  
-
-[Log Task5](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-templating/.history-10#L241-L287)  
-
-### Task \#6:  
-#### Create helm chart  
-
-[Log Task6](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-templating/.history-10#L289-L325)  
-
-### Task \#7:  
-#### Kubecfg  
-
-[Log Task7](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-templating/.history-10#L327-L342)  
-
-### Task \#8:  
-#### Kustomize  
-
-[Log Task8](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-templating/.history-10#L344-L354)  
-
-## Homework-11 aka 'kubernetes-vault'  
-[.history-11](https://github.com/otus-kuber-2019-06/pavelvizir_platform/blob/kubernetes-vault/.history-11)  
-### Task \#1:  
-#### Install vault  
-
-```sh
+# kubernetes-vault
+git checkout -b kubernetes-vault
+mkdir kubernetes-vault
+cd kubernetes-vault
+gcloud container clusters create gke --region europe-west4-b
+kubectl apply -f tiller-sa.yaml
+kubectl apply -f tiller-crb.yaml
+./helm init --service-account=tiller
 # clone consul and vault repos with helm
 git clone https://github.com/hashicorp/consul-helm.git
 cp consul-helm/values.yaml consul-helm-values.yaml
@@ -645,12 +64,8 @@ Your release is named vault. To learn more about the release, try:
 
   $ helm status vault
   $ helm get vault
-```
 
-### Task \#2:  
-#### Init vault  
-
-```sh
+# now init valut
 kubectl exec -it vault-0 -- vault operator init --key-shares=1 --key-threshold=1
 Unseal Key 1: ILnFVuaYPH3fJnoLbfMickokYoqyy/smQ1TPwQlcmFo=
 
@@ -666,12 +81,12 @@ reconstruct the master key, Vault will remain permanently sealed!
 
 It is possible to generate new unseal keys, provided you have a quorum of
 existing unseal keys shares. See "vault operator rekey" for more information.
-```
 
-### Task \#3:  
-#### Unseal vault  
-
-```sh
+# check status of vault
+kubectl logs vault-0
+kubectl exec -it vault-0 -- vault status
+kubectl exec -it vault-0 env | grep VAULT_ADDR
+# unseal vault
 for i in $(seq 0 2); do kubectl exec -it vault-$i -- vault operator unseal 'ILnFVuaYPH3fJnoLbfMickokYoqyy/smQ1TPwQlcmFo='; done
 Key                    Value
 ---                    -----
@@ -715,12 +130,8 @@ HA Enabled             true
 HA Cluster             https://10.16.2.7:8201
 HA Mode                standby
 Active Node Address    http://10.16.2.7:8200
-```
 
-### Task \#4:  
-#### Login into vault  
-
-```sh
+# login into vault 
 kubectl exec -it vault-0 -- vault auth list
 Error listing enabled authentications: Error making API request.
 
@@ -749,12 +160,8 @@ kubectl exec -it vault-0 -- vault auth list
 Path      Type     Accessor               Description
 ----      ----     --------               -----------
 token/    token    auth_token_86d61e5a    token based credentials
-```
 
-### Task \#5:  
-#### Create secrets  
-
-```sh
+# create secrets
 kubectl exec -it vault-0 -- vault secrets enable --path=otus kv
 kubectl exec -it vault-0 -- vault secrets list --detailed
 kubectl exec -it vault-0 -- vault kv put otus/otus-ro/config username='otus' password='asajkjkahs'
@@ -770,13 +177,9 @@ kubectl exec -it vault-0 -- vault kv get otus/otus-rw/config
 Key         Value
 ---         -----
 password    asajkjkahs
-username    otus
-```
+usernam    otus
 
-### Task \#6:  
-#### Enable kubernetes auth  
-
-```sh
+# enable kubernetes auth
 kubectl exec -it vault-0 -- vault auth enable kubernetes
 Success! Enabled kubernetes auth method at: kubernetes/
 kubectl exec -it vault-0 -- vault auth list
@@ -784,12 +187,9 @@ Path           Type          Accessor                    Description
 ----           ----          --------                    -----------
 kubernetes/    kubernetes    auth_kubernetes_6a2fa02e    n/a
 token/         token         auth_token_86d61e5a         token based credentials
-```
 
-### Task \#7:  
-#### Create ClusterRoleBinding  
-
-```yaml
+# create crb
+cat vault-auth-service-account.yaml
 ---
 apiVersion: rbac.authorization.k8s.io/v1beta1
 kind: ClusterRoleBinding
@@ -804,17 +204,10 @@ subjects:
   - kind: ServiceAccount
     name: vault-auth
     namespace: default
-```
 
-```sh
 kubectl create serviceaccount vault-auth
 kubectl apply -f vault-auth-service-account.yaml
-```
 
-### Task \#8:  
-#### Prepare authorization, create policy and check it  
-
-```sh
 # Prepare variables for kubernetes auth config
 export VAULT_SA_NAME=$(kubectl get sa vault-auth -o jsonpath="{.secrets[*]['name']}")
 export SA_JWT_TOKEN=$(kubectl get secret $VAULT_SA_NAME -o jsonpath="{.data.token}" | base64 --decode; echo)
@@ -873,14 +266,7 @@ curl --request POST --data '{"bar": "baz"}' --header "X-Vault-Token:$TOKEN" $VAU
 curl --request POST --data '{"bar": "baz"}' --header "X-Vault-Token:$TOKEN" $VAULT_ADDR/v1/otus/otus-rw/config
 {"errors":["1 error occurred:\n\t* permission denied\n\n"]}
 curl --request POST --data '{"bar": "baz"}' --header "X-Vault-Token:$TOKEN" $VAULT_ADDR/v1/otus/otus-rw/config1
-```
 
-### Task \#9:  
-#### Why do we have errors? Fix it  
-
-We don't have rights to modify records  
-
-```sh
 # Q: why do we have errors?
 # A: no rights to modify records
 # let's change policy
@@ -897,12 +283,8 @@ kubectl exec -it vault-0 -- vault policy write otus-policy /vault/otus-policy.hc
 # repeat write
 curl --request POST --data '{"bar": "baz"}' --header "X-Vault-Token:$TOKEN" $VAULT_ADDR/v1/otus/otus-rw/config
 # now good
-```
-
-### Task \#10:  
-#### Use case: authorization with exapmle  
-
-```sh
+#
+# Task 11
 # Use case: authorization via kubernetes with example
 git clone https://github.com/hashicorp/vault-guides.git
 cd vault-guides/identity/vault-agent-k8s-demo
@@ -980,25 +362,10 @@ cat index.html
 
   </body>
   </html>
-```
 
-```html
-  <html>
-  <body>
-  <p>Some secrets:</p>
-  <ul>
-  <li><pre>username: otus</pre></li>
-  <li><pre>password: asajkjkahs</pre></li>
-  </ul>
 
-  </body>
-  </html>
-```
-
-### Task \#11:  
-#### Create CA with vault's help  
-
-```sh
+# next task
+# Task 12(11? too many tasks): Create CA with helm of vault  
 # turn on pki secrets
 kubectl exec -it vault-0 -- vault secrets enable pki
 Success! Enabled the pki secrets engine at: pki/
@@ -1132,4 +499,33 @@ Key                        Value
 ---                        -----
 revocation_time            1576500518
 revocation_time_rfc3339    2019-12-16T12:48:38.010849494Z
-```
+
+# the end
+# update README.md
+# update .gitignore to ignore vault-guides dir, copy all needed files etc
+# delete cluster
+gcloud container clusters delete gke --region europe-west4-b
+The following clusters will be deleted.
+ - [gke] in [europe-west4-b]
+
+Do you want to continue (Y/n)?  y
+
+Deleting cluster gke...done.
+Deleted [https://container.googleapis.com/v1/projects/ascendant-study-247407/zones/europe-west4-b/clusters/gke].
+# now commit, push, prepare PR
+
+# Выполнено ДЗ №11
+
+ - [*] Основное ДЗ
+
+## В процессе сделано:
+ - [Практика использования vault k8s](https://github.com/otus-kuber-2019-06/pavelvizir_platform/tree/kubernetes-vault#homework-11-aka-kubernetes-vault)
+
+## Как запустить проект:
+ - [Практика использования vault k8s](https://github.com/otus-kuber-2019-06/pavelvizir_platform/tree/kubernetes-vault#homework-11-aka-kubernetes-vault)
+
+## Как проверить работоспособность:
+ - [Практика использования vault k8s](https://github.com/otus-kuber-2019-06/pavelvizir_platform/tree/kubernetes-vault#homework-11-aka-kubernetes-vault)
+
+## PR checklist:
+ - [*] Выставлен label с номером домашнего задания
